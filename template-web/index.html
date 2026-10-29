@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#0d1528" />
+  <meta name="description" content="Exemplo de aplicação web criada pela AI Software Factory." />
+  <title>Minhas Tarefas | AI Software Factory</title>
+  <link rel="stylesheet" href="styles.css" />
+  <script defer src="app.js"></script>
+</head>
+<body>
+  <main class="shell">
+    <header class="topbar">
+      <div class="brand"><span class="brand-icon" aria-hidden="true">✦</span><span>AI Software Factory <small>DEMO WEB</small></span></div>
+      <span class="version">MVP 1.0</span>
+    </header>
+    <section class="hero" aria-labelledby="page-title">
+      <div><span class="eyebrow">EXEMPLO DE SISTEMA PUBLICÁVEL</span><h1 id="page-title">Organize seu dia.<br><span>Faça acontecer.</span></h1><p>Um aplicativo responsivo com cadastro, conclusão, filtros e armazenamento local. Sem servidor, sem cadastro e sem complicação.</p></div>
+      <div class="stat-card"><span>Suas tarefas</span><strong id="task-count">0</strong><small id="task-summary">Tudo pronto para começar</small></div>
+    </section>
+    <section class="workspace" aria-label="Gerenciamento de tarefas">
+      <div class="workspace-header"><div><h2>Meu quadro</h2><p>Pequenos passos, grandes entregas.</p></div><span class="private-note">◉ Salvo neste navegador</span></div>
+      <form id="task-form" class="task-form"><label class="sr-only" for="task-input">Nova tarefa</label><input id="task-input" name="task" maxlength="140" required placeholder="O que precisa ser feito?" autocomplete="off" /><button type="submit">+ Adicionar</button></form>
+      <div class="toolbar" role="group" aria-label="Filtrar tarefas"><button class="filter active" data-filter="all" aria-pressed="true">Todas</button><button class="filter" data-filter="pending" aria-pressed="false">Pendentes</button><button class="filter" data-filter="done" aria-pressed="false">Concluídas</button><span id="pending-count" class="pending-count">0 pendentes</span></div>
+      <ul id="task-list" class="task-list" aria-live="polite"></ul>
+      <div id="empty-state" class="empty-state"><span aria-hidden="true">☑</span><h3>Nenhuma tarefa por aqui</h3><p>Adicione sua primeira tarefa e comece a avançar.</p></div>
+    </section>
+    <footer>Construído para demonstrar o MVP da AI Software Factory. Dados armazenados apenas no dispositivo.</footer>
+  </main>
+</body>
+</html>
