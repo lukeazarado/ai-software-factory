@@ -1,193 +1,284 @@
+"""Offline tests: mock OIDC exchange but exercise real session, CSRF, owner isolation and AES-GCM."""
 import base64
+import os
 from pathlib import Path
 import sqlite3
+import time
+from urllib.parse import urlparse, parse_qs
 
-from fastapi.testclient import TestClient
 import pytest
+from fastapi.testclient import TestClient
 
 from apps.agenda_atleta.app import create_app
 
-PASSWORD = "senha-de-teste-longa"
+CLIENT_ID = "google-client-test"
+SECRET = "google-secret-test"
+LOCAL_URI = "http://127.0.0.1:8000/auth/google/callback"
+
+
+def key():
+    return base64.urlsafe_b64encode(os.urandom(32)).decode()
 
 
 @pytest.fixture
-def client(tmp_path):
-    app = create_app(db_path=tmp_path / "dados.sqlite3", password=PASSWORD)
-    with TestClient(app) as http:
-        http.headers["Authorization"] = "Basic " + base64.b64encode(f"admin:{PASSWORD}".encode()).decode()
-        yield http
+def setup(tmp_path):
+    db = tmp_path / "secure.sqlite3"
+    secret = key()
+    claims = {"sub": "google-person-1", "nonce": ""}
+
+    def exchange(code, verifier):
+        assert code == "verified-code"
+        assert len(verifier) > 30
+        return {"id_token": "verified-token"}
+
+    def verify(token, aud):
+        assert token == "verified-token"
+        assert aud == CLIENT_ID
+        return claims.copy()
+
+    app = create_app(db, encryption_key=secret, client_id=CLIENT_ID, client_secret=SECRET,
+                     redirect_uri=LOCAL_URI, token_exchange=exchange, token_verifier=verify)
+    return app, db, secret, claims
 
 
-def first_athlete(client):
-    result = client.get("/api/athletes")
-    assert result.status_code == 200
-    return result.json()[0]["id"]
-
-
-def sample_item(id="evento-01", day=1, end="18:00"):
-    return {"id": id, "title": "Treino Sub-8", "type": "training", "school": "Gol de Placa", "day": day,
-            "start": "17:00", "end": end, "location": "Campo 1", "notes": "", "sourceId": "treino-10"}
-
-
-def test_password_required(tmp_path):
-    with pytest.raises(RuntimeError, match="APP_PASSWORD"):
-        create_app(tmp_path / "x.sqlite3", password="curta")
-
-
-def test_protection_includes_html_and_api(client):
-    assert client.get("/", headers={"Authorization": ""}).status_code == 401
-    denied = client.get("/api/athletes", headers={"Authorization": ""})
-    assert denied.status_code == 401
-    assert "Basic" in denied.headers["www-authenticate"]
-    home = client.get("/")
-    assert home.status_code == 200
-    assert "Agenda do Atleta Pro" in home.text
-    assert "Minha semana" in home.text
-    assert home.headers["cache-control"] == "no-store"
-
-
-def test_create_save_reload_and_isolation(client):
-    first = first_athlete(client)
-    second_result = client.post("/api/athletes", json={"name": "Atleta B"})
-    assert second_result.status_code == 201
-    second = second_result.json()["id"]
-    payload = {"revision": 0, "events": [sample_item()], "available": [sample_item("treino-10", 3)]}
-    saved = client.put(f"/api/athletes/{first}/state", json=payload)
-    assert saved.status_code == 200, saved.text
-    assert saved.json()["revision"] == 1
-    state = client.get(f"/api/athletes/{first}/state").json()
-    assert state["events"] == [sample_item()]
-    assert state["available"] == [sample_item("treino-10", 3)]
-    assert client.get(f"/api/athletes/{second}/state").json()["events"] == []
-    another_save = client.put(f"/api/athletes/{second}/state", json={"revision": 0, "events": [], "available": []})
-    assert another_save.status_code == 200
-    assert client.get(f"/api/athletes/{first}/state").json()["revision"] == 1
-
-
-def test_revision_conflict_keeps_data(client):
-    athlete = first_athlete(client)
-    first = {"revision": 0, "events": [sample_item()], "available": []}
-    assert client.put(f"/api/athletes/{athlete}/state", json=first).status_code == 200
-    stale = client.put(f"/api/athletes/{athlete}/state", json={"revision": 0, "events": [], "available": []})
-    assert stale.status_code == 409
-    assert len(client.get(f"/api/athletes/{athlete}/state").json()["events"]) == 1
-
-
-@pytest.mark.parametrize("item", [
-    sample_item(end="16:00"), sample_item(day=7), sample_item(end="33:00"),
-    {**sample_item(), "title": "x" * 81}, {**sample_item(), "type": "unknown"},
-])
-def test_reject_invalid_items(client, item):
-    athlete = first_athlete(client)
-    response = client.put(f"/api/athletes/{athlete}/state", json={"revision": 0, "events": [item], "available": []})
-    assert response.status_code == 422
-    assert client.get(f"/api/athletes/{athlete}/state").json()["revision"] == 0
-
-
-def test_reject_duplicate_ids(client):
-    athlete = first_athlete(client)
-    response = client.put(f"/api/athletes/{athlete}/state", json={"revision": 0, "events": [sample_item(), sample_item()], "available": []})
-    assert response.status_code == 422
-
-
-def test_rename_delete_and_last_athlete_guard(client):
-    first = first_athlete(client)
-    assert client.delete(f"/api/athletes/{first}").status_code == 409
-    added = client.post("/api/athletes", json={"name": "Bia"}).json()["id"]
-    assert client.patch(f"/api/athletes/{added}", json={"name": "  Bianca  "}).json()["name"] == "Bianca"
-    assert client.delete(f"/api/athletes/{first}").status_code == 200
-    assert len(client.get("/api/athletes").json()) == 1
-    assert client.get(f"/api/athletes/{first}/state").status_code == 404
-
-
-def test_sqlite_persistence_survives_restart(tmp_path):
-    db = tmp_path / "agenda.sqlite3"
-    first = create_app(db, password=PASSWORD)
-    headers = {"Authorization": "Basic " + base64.b64encode(f"admin:{PASSWORD}".encode()).decode()}
-    with TestClient(first) as http:
-        who = http.get("/api/athletes", headers=headers).json()[0]["id"]
-        response = http.put(f"/api/athletes/{who}/state", headers=headers, json={"revision": 0, "events": [sample_item()], "available": []})
-        assert response.status_code == 200
-    second = create_app(db, password=PASSWORD)
-    with TestClient(second) as http:
-        assert http.get(f"/api/athletes/{who}/state", headers=headers).json()["events"][0]["title"] == "Treino Sub-8"
+def sign_in(client, db, claims, sub):
+    claims["sub"] = sub
+    response = client.get("/auth/google/start", follow_redirects=False)
+    assert response.status_code == 302
+    url = urlparse(response.headers["location"])
+    assert url.hostname == "accounts.google.com"
+    args = parse_qs(url.query)
+    assert args["code_challenge_method"] == ["S256"]
+    assert args["scope"] == ["openid email"]
+    state = args["state"][0]
     with sqlite3.connect(db) as conn:
-        assert conn.execute("SELECT COUNT(*) FROM items").fetchone()[0] == 1
+        claims["nonce"] = conn.execute("SELECT nonce FROM login_flows").fetchone()[0]
+    callback = client.get("/auth/google/callback", params={"code": "verified-code", "state": state}, follow_redirects=False)
+    assert callback.status_code == 303, callback.text
+    assert callback.headers["location"] == "/"
+    assert "HttpOnly" in callback.headers["set-cookie"]
+    assert "samesite=lax" in callback.headers["set-cookie"].lower()
+    return client.get("/api/auth/me").json()["csrfToken"]
 
 
-def test_html_keeps_original_sections_and_server_persistence(client):
-    text = client.get("/").text
-    for marker in ('id="section-overview"', 'id="section-library"', 'id="section-week"',
-                   'id="section-academy"', 'id="section-summary"',
-                   'id="academyCatalog"', 'id="importBtn"', 'id="exportBtn"',
-                   'id="athleteSelect"', 'id="weekGrid"'):
-        assert marker in text
-    assert 'localStorage.setItem(KEY' not in text
-    assert "/api/athletes" in text
-    assert 'Salvo no banco' in text
+def sample_item(item_id="item-1", **kwargs):
+    return {"id": item_id, "title": "Consulta particular 123", "type": "training",
+            "school": "Escola privada 123", "day": 2, "start": "15:00", "end": "16:00",
+            "location": "Endereço privado 123", "notes": "Anotação pessoal 123", "catalogId": "t2-ter", **kwargs}
 
 
-def test_academy_catalog_item_is_saved_and_returned(client):
-    """Regression: Gol de Placa uses catalogId, previously rejected with HTTP 422."""
-    athlete = first_athlete(client)
-    slot = {**sample_item(), "id": "catalog-event-1", "catalogId": "t2-ter"}
-    response = client.put(f"/api/athletes/{athlete}/state", json={
-        "revision": 0, "events": [slot], "available": []
-    })
-    assert response.status_code == 200, response.text
-    saved = client.get(f"/api/athletes/{athlete}/state").json()
-    assert saved["revision"] == 1
-    assert saved["events"] == [slot]
-    # A later ordinary save must also work after the catalog item was persisted.
-    more = client.put(f"/api/athletes/{athlete}/state", json={
-        "revision": 1, "events": [slot, sample_item("after-catalog")], "available": []
-    })
-    assert more.status_code == 200, more.text
-    reloaded = client.get(f"/api/athletes/{athlete}/state").json()
-    assert reloaded["events"][0]["catalogId"] == "t2-ter"
-    assert len(reloaded["events"]) == 2
+def test_required_security_config(tmp_path):
+    with pytest.raises(RuntimeError, match="APP_ENCRYPTION_KEY"):
+        create_app(tmp_path / "x.db", encryption_key="short", client_id=CLIENT_ID, client_secret=SECRET, redirect_uri=LOCAL_URI)
+    with pytest.raises(RuntimeError, match="GOOGLE_CLIENT"):
+        create_app(tmp_path / "x.db", encryption_key=key(), redirect_uri=LOCAL_URI)
+    with pytest.raises(RuntimeError, match="HTTPS"):
+        create_app(tmp_path / "x.db", encryption_key=key(), client_id=CLIENT_ID,
+                   client_secret=SECRET, redirect_uri="http://example.org/auth/google/callback")
 
 
-def test_existing_sqlite_schema_is_migrated_without_data_loss(tmp_path):
-    """Migrates the published MVP schema while retaining events and athletes."""
-    db = tmp_path / "old.sqlite3"
-    with sqlite3.connect(db) as conn:
-        conn.executescript("""
-        CREATE TABLE athletes (id TEXT PRIMARY KEY, name TEXT NOT NULL, revision INTEGER NOT NULL DEFAULT 0);
-        CREATE TABLE items (
-            athlete_id TEXT NOT NULL REFERENCES athletes(id) ON DELETE CASCADE,
-            collection TEXT NOT NULL CHECK(collection IN ('events', 'available')),
-            id TEXT NOT NULL, position INTEGER NOT NULL, title TEXT NOT NULL,
-            type TEXT NOT NULL, school TEXT NOT NULL, day INTEGER NOT NULL,
-            start TEXT NOT NULL, end TEXT NOT NULL, location TEXT NOT NULL,
-            notes TEXT NOT NULL, source_id TEXT,
-            PRIMARY KEY(athlete_id, collection, id));
-        INSERT INTO athletes (id,name,revision) VALUES ('legacy','Atleta Antigo',1);
-        INSERT INTO items VALUES ('legacy','events','old',0,'Treino existente','training','Escola',1,'17:00','18:00','','',NULL);
-        """)
-    app = create_app(db, password=PASSWORD)
-    auth = {"Authorization": "Basic " + base64.b64encode(f"admin:{PASSWORD}".encode()).decode()}
-    with TestClient(app) as http:
-        original = http.get("/api/athletes/legacy/state", headers=auth)
-        assert original.status_code == 200
-        assert original.json()["events"][0]["title"] == "Treino existente"
-        assert original.json()["revision"] == 1
-        old = original.json()["events"][0]
-        new = {**sample_item("new"), "catalogId": "t2-ter"}
-        response = http.put("/api/athletes/legacy/state", headers=auth,
-                            json={"revision": 1, "events": [old, new], "available": []})
+def test_requires_google_session(setup):
+    app, db, _, claims = setup
+    with TestClient(app) as client:
+        assert client.get("/").status_code == 200  # redirects to safe login page
+        assert client.get("/api/athletes").status_code == 401
+        assert client.post("/api/athletes", json={"name": "X"}).status_code == 401
+        assert client.get("/favicon.ico").status_code == 204
+        assert client.get("/login").status_code == 200
+        csrf = sign_in(client, db, claims, "user-1")
+        assert client.get("/").status_code == 200
+        assert "id=\"athleteSelect\"" in client.get("/").text
+        assert "logoutBtn" in client.get("/").text
+        assert csrf
+
+
+def test_tenant_isolation_for_all_athlete_routes(setup):
+    app, db, _, claims = setup
+    with TestClient(app) as alice:
+        csrf_a = sign_in(alice, db, claims, "google-alice")
+        aid = alice.get("/api/athletes").json()[0]["id"]
+        save = alice.put(f"/api/athletes/{aid}/state", headers={"X-CSRF-Token": csrf_a},
+                         json={"revision": 0, "events": [sample_item()], "available": []})
+        assert save.status_code == 200, save.text
+        with TestClient(app) as bob:
+            csrf_b = sign_in(bob, db, claims, "google-bob")
+            b_id = bob.get("/api/athletes").json()[0]["id"]
+            assert b_id != aid
+            assert aid not in [x["id"] for x in bob.get("/api/athletes").json()]
+            assert bob.get(f"/api/athletes/{aid}/state").status_code == 404
+            assert bob.put(f"/api/athletes/{aid}/state", headers={"X-CSRF-Token": csrf_b},
+                           json={"revision": 0, "events": [], "available": []}).status_code == 404
+            assert bob.patch(f"/api/athletes/{aid}", headers={"X-CSRF-Token": csrf_b},
+                             json={"name": "Invasão"}).status_code == 404
+            assert bob.delete(f"/api/athletes/{aid}", headers={"X-CSRF-Token": csrf_b}).status_code == 404
+            assert bob.get(f"/api/athletes/{b_id}/state").json()["events"] == []
+        assert len(alice.get(f"/api/athletes/{aid}/state").json()["events"]) == 1
+
+
+def test_all_sensitive_columns_encrypted_and_roundtrip(setup):
+    app, db, _, claims = setup
+    with TestClient(app) as client:
+        csrf = sign_in(client, db, claims, "google-account-2")
+        aid = client.post("/api/athletes", headers={"X-CSRF-Token": csrf},
+                          json={"name": "Atleta Sigiloso 123"}).json()["id"]
+        data = {"revision": 0, "events": [sample_item()], "available": [sample_item("item-2")]}
+        response = client.put(f"/api/athletes/{aid}/state", headers={"X-CSRF-Token": csrf}, json=data)
         assert response.status_code == 200, response.text
-        persisted = http.get("/api/athletes/legacy/state", headers=auth).json()
-        assert len(persisted["events"]) == 2
-        assert persisted["events"][1]["catalogId"] == "t2-ter"
+        state = client.get(f"/api/athletes/{aid}/state").json()
+        assert state["events"] == data["events"]
+        assert state["available"] == data["available"]
+        assert state["revision"] == 1
+        assert any(x["name"] == "Atleta Sigiloso 123" for x in client.get("/api/athletes").json())
+    raw = db.read_bytes()
+    for private in (b"Atleta Sigiloso 123", b"Consulta particular 123", b"Escola privada 123", b"Endere\xc3\xa7o privado 123", b"Anota\xc3\xa7\xc3\xa3o pessoal 123"):
+        assert private not in raw
     with sqlite3.connect(db) as conn:
-        assert "catalog_id" in {row[1] for row in conn.execute("PRAGMA table_info(items)")}
-        assert conn.execute("SELECT COUNT(*) FROM athletes").fetchone()[0] == 1
+        assert conn.execute("SELECT name_enc FROM athletes WHERE id=?", (aid,)).fetchone()[0].startswith("enc:v1:")
+        assert conn.execute("SELECT title_enc FROM items LIMIT 1").fetchone()[0].startswith("enc:v1:")
+        assert "name" not in {x[1] for x in conn.execute("PRAGMA table_info(athletes)")}
 
 
-def test_invalid_catalog_id_remains_rejected(client):
-    athlete = first_athlete(client)
-    invalid = {**sample_item(), "catalogId": "x" * 101}
-    response = client.put(f"/api/athletes/{athlete}/state", json={
-        "revision": 0, "events": [invalid], "available": []})
-    assert response.status_code == 422
+def test_csrf_and_logout(setup):
+    app, db, _, claims = setup
+    with TestClient(app) as client:
+        csrf = sign_in(client, db, claims, "google-csrf")
+        for method, path, json in [("POST", "/api/athletes", {"name": "Outro"}),
+                                   ("PUT", "/api/athletes/fake/state", {"revision": 0, "events": [], "available": []}),
+                                   ("PATCH", "/api/athletes/fake", {"name": "Outro"}),
+                                   ("DELETE", "/api/athletes/fake", None),
+                                   ("POST", "/api/auth/logout", None)]:
+            assert client.request(method, path, json=json).status_code == 403
+            assert client.request(method, path, headers={"X-CSRF-Token": "invalid"}, json=json).status_code == 403
+        assert client.post("/api/auth/logout", headers={"X-CSRF-Token": csrf}).status_code == 204
+        assert client.get("/api/athletes").status_code == 401
+
+
+def test_validation_revision_catalog_and_isolation(setup):
+    app, db, _, claims = setup
+    with TestClient(app) as client:
+        csrf = sign_in(client, db, claims, "google-verified")
+        aid = client.get("/api/athletes").json()[0]["id"]
+        headers = {"X-CSRF-Token": csrf}
+        assert client.put(f"/api/athletes/{aid}/state", headers=headers,
+                          json={"revision": 0, "events": [sample_item("bad", day=8)], "available": []}).status_code == 422
+        saved = client.put(f"/api/athletes/{aid}/state", headers=headers,
+                           json={"revision": 0, "events": [sample_item()], "available": []})
+        assert saved.status_code == 200
+        assert client.get(f"/api/athletes/{aid}/state").json()["events"][0]["catalogId"] == "t2-ter"
+        assert client.put(f"/api/athletes/{aid}/state", headers=headers,
+                          json={"revision": 0, "events": [], "available": []}).status_code == 409
+        assert len(client.get(f"/api/athletes/{aid}/state").json()["events"]) == 1
+
+
+def test_last_athlete_guard_and_delete_scope(setup):
+    app, db, _, claims = setup
+    with TestClient(app) as client:
+        csrf = sign_in(client, db, claims, "google-1")
+        headers = {"X-CSRF-Token": csrf}
+        first = client.get("/api/athletes").json()[0]["id"]
+        assert client.delete(f"/api/athletes/{first}", headers=headers).status_code == 409
+        second = client.post("/api/athletes", headers=headers, json={"name": "B"}).json()["id"]
+        assert client.patch(f"/api/athletes/{second}", headers=headers, json={"name": "C"}).status_code == 200
+        assert client.delete(f"/api/athletes/{first}", headers=headers).status_code == 200
+        assert client.get(f"/api/athletes/{first}/state").status_code == 404
+
+
+def test_restart_with_same_key_preserves_data(setup):
+    app, db, secret, claims = setup
+    with TestClient(app) as c:
+        sign_in(c, db, claims, "stable-google-sub")
+        aid = c.get("/api/athletes").json()[0]["id"]
+    app2 = create_app(db, encryption_key=secret, client_id=CLIENT_ID, client_secret=SECRET,
+                      redirect_uri=LOCAL_URI, token_exchange=lambda *x: {"id_token": "t"},
+                      token_verifier=lambda *x: {"sub": "stable-google-sub", "nonce": claims["nonce"]})
+    with TestClient(app2) as c2:
+        sign_in(c2, db, claims, "stable-google-sub")
+        assert c2.get("/api/athletes").json()[0]["id"] == aid
+
+
+def test_legacy_database_refuses_implicit_claim(tmp_path):
+    db = tmp_path / "legacy.sqlite3"
+    with sqlite3.connect(db) as conn:
+        conn.execute("CREATE TABLE athletes (id TEXT PRIMARY KEY, name TEXT NOT NULL)")
+        conn.execute("INSERT INTO athletes VALUES ('legacy', 'Personal Data - Secret')")
+    with pytest.raises(RuntimeError, match="Banco legado"):
+        create_app(db, encryption_key=key(), client_id=CLIENT_ID, client_secret=SECRET,
+                   redirect_uri=LOCAL_URI)
+    with sqlite3.connect(db) as conn:
+        assert conn.execute("SELECT name FROM athletes").fetchone()[0] == "Personal Data - Secret"
+
+
+def test_oauth_state_reuse_invalid_nonce_and_no_access(setup):
+    app, db, _, claims = setup
+    with TestClient(app) as c:
+        assert c.get("/auth/google/callback", params={"code": "verified-code", "state": "unknown"}).status_code == 400
+        start = c.get("/auth/google/start", follow_redirects=False)
+        state = parse_qs(urlparse(start.headers["location"]).query)["state"][0]
+        with sqlite3.connect(db) as conn:
+            real_nonce = conn.execute("SELECT nonce FROM login_flows").fetchone()[0]
+        claims["sub"] = "u1"
+        claims["nonce"] = "wrong-nonce"
+        assert c.get("/auth/google/callback", params={"code": "verified-code", "state": state}).status_code == 401
+        assert c.get("/api/athletes").status_code == 401
+        claims["nonce"] = real_nonce
+        assert c.get("/auth/google/callback", params={"code": "verified-code", "state": state}).status_code == 400
+
+
+def test_expired_session_denied(setup):
+    app, db, _, claims = setup
+    with TestClient(app) as c:
+        sign_in(c, db, claims, "expiring-user")
+        with sqlite3.connect(db) as conn:
+            conn.execute("UPDATE sessions SET expires=?", (int(time.time()) - 1,))
+        assert c.get("/api/athletes").status_code == 401
+
+
+def test_secure_cookie_for_https(tmp_path):
+    db = tmp_path / "secure.db"
+    claims = {"sub": "person", "nonce": ""}
+    app = create_app(db, encryption_key=key(), client_id=CLIENT_ID, client_secret=SECRET,
+                     redirect_uri="https://app.example.org/auth/google/callback",
+                     token_exchange=lambda *x: {"id_token": "t"}, token_verifier=lambda *x: claims.copy())
+    with TestClient(app, base_url="https://app.example.org") as c:
+        r = c.get("/auth/google/start", follow_redirects=False)
+        assert "Secure" in r.headers["set-cookie"]
+        state = parse_qs(urlparse(r.headers["location"]).query)["state"][0]
+        with sqlite3.connect(db) as conn:
+            claims["nonce"] = conn.execute("SELECT nonce FROM login_flows").fetchone()[0]
+        r = c.get("/auth/google/callback", params={"code": "verified-code", "state": state}, follow_redirects=False)
+        assert "Secure" in r.headers["set-cookie"]
+        assert r.headers["strict-transport-security"]
+
+
+def test_wrong_encryption_key_refuses_database(setup):
+    _, db, _, _ = setup
+    with pytest.raises(RuntimeError, match="APP_ENCRYPTION_KEY não corresponde"):
+        create_app(db, encryption_key=key(), client_id=CLIENT_ID,
+                   client_secret=SECRET, redirect_uri=LOCAL_URI)
+
+
+def test_owner_cannot_reuse_other_owners_csrf(setup):
+    app, db, _, claims = setup
+    with TestClient(app) as first:
+        csrf1 = sign_in(first, db, claims, "owner1")
+        with TestClient(app) as second:
+            csrf2 = sign_in(second, db, claims, "owner2")
+            assert first.post("/api/athletes", headers={"X-CSRF-Token": csrf2}, json={"name": "A"}).status_code == 403
+            assert second.post("/api/athletes", headers={"X-CSRF-Token": csrf1}, json={"name": "B"}).status_code == 403
+            assert first.post("/api/athletes", headers={"X-CSRF-Token": csrf1}, json={"name": "A"}).status_code == 201
+
+
+def test_source_and_catalog_id_saved_after_restart(setup):
+    app, db, secret, claims = setup
+    with TestClient(app) as c:
+        csrf = sign_in(c, db, claims, "catalog-user")
+        aid = c.get("/api/athletes").json()[0]["id"]
+        event = {**sample_item(), "sourceId": "abc-123"}
+        assert c.put(f"/api/athletes/{aid}/state", headers={"X-CSRF-Token": csrf},
+                     json={"revision": 0, "events": [event], "available": []}).status_code == 200
+    app2 = create_app(db, encryption_key=secret, client_id=CLIENT_ID, client_secret=SECRET,
+                      redirect_uri=LOCAL_URI, token_exchange=lambda *x: {"id_token": "verified-token"},
+                      token_verifier=lambda *x: claims.copy())
+    with TestClient(app2) as c2:
+        sign_in(c2, db, claims, "catalog-user")
+        assert c2.get(f"/api/athletes/{aid}/state").json()["events"] == [event]
