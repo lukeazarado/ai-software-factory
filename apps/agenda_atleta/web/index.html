@@ -605,7 +605,9 @@ function openModal(id=null,kind='event',day=0){
 }
 function closeModal(){$('modal').classList.add('hidden');$('modal').classList.remove('flex')}
 $('eventForm').addEventListener('submit',e=>{e.preventDefault();const kind=$('itemKind').value,id=$('itemId').value,title=$('title').value.trim(),start=$('start').value,end=$('end').value,error=$('formError');if(!title||!start){error.textContent='Preencha o nome e o horário de início.';error.classList.remove('hidden');return}if(end&&end<=start){error.textContent='O término precisa ser posterior ao início.';error.classList.remove('hidden');return}
- const item={id:id||uid(),title,type:$('type').value,school:$('school').value.trim(),day:Number($('day').value),start,end,location:$('location').value.trim(),notes:$('notes').value.trim()};
+ const previous=id?(kind==='available'?available:events).find(x=>x.id===id):null;
+ const item={id:id||uid(),title,type:$('type').value,school:$('school').value.trim(),day:Number($('day').value),start,end,location:$('location').value.trim(),notes:$('notes').value.trim(),
+  ...(previous?.sourceId?{sourceId:previous.sourceId}:{}),...(previous?.catalogId?{catalogId:previous.catalogId}:{})};
  if(kind==='available'){if(id)available=available.map(x=>x.id===id?item:x);else available.push(item)}else{if(id)events=events.map(x=>x.id===id?item:x);else events.push(item)}
  save();closeModal();render();toast(id?'Item atualizado!':kind==='available'?'Treino disponível cadastrado!':'Compromisso adicionado à grade!')
 });
@@ -632,7 +634,7 @@ function normalizeImportedItem(item,kind,index){
  if(end&&(parseTime(end)===null||parseTime(end)<=parseTime(start)))throw Error(`Item ${index+1} de ${kind} possui horário final inválido.`);
  const type=['training','game','other'].includes(item.type)?item.type:'other';
  const text=(v,max)=>String(v??'').slice(0,max);
- return {id:text(item.id,100)||uid(),title:title.slice(0,80),type,school:text(item.school,100),day,start,end,location:text(item.location,100),notes:text(item.notes,300),...(item.sourceId?{sourceId:text(item.sourceId,100)}:{})};
+ return {id:text(item.id,100)||uid(),title:title.slice(0,80),type,school:text(item.school,100),day,start,end,location:text(item.location,100),notes:text(item.notes,300),...(item.sourceId?{sourceId:text(item.sourceId,100)}:{}),...(item.catalogId?{catalogId:text(item.catalogId,100)}:{})};
 }
 function parseImportedJSON(raw){
  let data;
