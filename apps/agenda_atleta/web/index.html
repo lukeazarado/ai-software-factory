@@ -226,7 +226,7 @@ body.sidebar-collapsed .nav-link:focus-visible::before{content:"";position:absol
 </aside>
 <header class="app-topbar">
  <div class="topbar-left"><button id="openNav" class="menu-toggle" aria-label="Abrir menu" aria-expanded="false">☰</button><span class="topbar-breadcrumb">Workspace <span>/</span> Planejamento semanal</span><div class="athlete-switcher" aria-label="Selecionar atleta"><label class="sr-only" for="athleteSelect">Atleta</label><select id="athleteSelect" class="field" aria-label="Atleta ativo"></select><button type="button" id="addAthlete" class="btn btn-outline" title="Cadastrar atleta" aria-label="Cadastrar atleta">＋</button><button type="button" id="renameAthlete" class="btn btn-outline" title="Renomear atleta" aria-label="Renomear atleta">✎</button><button type="button" id="deleteAthlete" class="btn btn-outline" title="Excluir atleta" aria-label="Excluir atleta">×</button></div></div>
- <div class="topbar-actions"><span class="save-status"><span></span> Salvo no banco</span><button id="importBtn" type="button" class="btn btn-outline"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 16V3m0 0-5 5m5-5 5 5M4 15v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"/></svg><span>Importar JSON</span></button><button id="exportBtn" type="button" class="btn btn-outline"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v13m0 0-5-5m5 5 5-5M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg><span>Exportar</span></button></div>
+ <div class="topbar-actions"><span class="save-status"><span></span> Salvo no banco seguro</span><button id="logoutBtn" type="button" class="btn btn-outline" aria-label="Sair da conta Google">Sair</button><button id="importBtn" type="button" class="btn btn-outline"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 16V3m0 0-5 5m5-5 5 5M4 15v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"/></svg><span>Importar JSON</span></button><button id="exportBtn" type="button" class="btn btn-outline"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v13m0 0-5-5m5 5 5-5M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg><span>Exportar</span></button></div>
 </header>
 <main class="max-w-7xl mx-auto px-4 sm:px-6 py-6">
   <section class="dashboard-hero" aria-label="Introdução ao planejamento">
@@ -360,6 +360,7 @@ const DAYS=[{id:0,name:'Domingo'},{id:1,name:'Segunda'},{id:2,name:'Terça'},{id
 const TYPES={training:{label:'Treino',icon:'🏃',cls:'bg-indigo-50 border-indigo-200 text-indigo-800'},game:{label:'Jogo',icon:'⚽',cls:'bg-emerald-50 border-emerald-200 text-emerald-800'},other:{label:'Outro',icon:'📌',cls:'bg-amber-50 border-amber-200 text-amber-800'}};
 let events=[],available=[],dragged=null,toastTimer;
 let athletes=[],activeAthleteId=null,revisionByAthlete=new Map(),saveQueue=Promise.resolve(true);
+let csrfToken=null;
 function uid(){return 'item_'+Date.now()+'_'+Math.random().toString(36).slice(2,8)}
 function esc(s=''){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function dayName(id){return DAYS.find(d=>d.id===Number(id))?.name||'Dia'}
@@ -369,7 +370,10 @@ function setSaveStatus(message,kind='ok'){
  const dot=document.createElement('span');node.replaceChildren(dot,document.createTextNode(' '+message));
 }
 async function api(path,options={}){
- const response=await fetch(path,{...options,headers:{'Content-Type':'application/json',...(options.headers||{})},cache:'no-store'});
+ const method=(options.method||'GET').toUpperCase();
+ const writeHeaders=method==='GET'?{}:{'X-CSRF-Token':csrfToken||''};
+ const response=await fetch(path,{credentials:'same-origin',...options,headers:{'Content-Type':'application/json',...writeHeaders,...(options.headers||{})},cache:'no-store'});
+ if(response.status===401){window.location.assign('/login');throw Error('Sessão expirada. Entre novamente com Google.');}
  let data;try{data=await response.json()}catch(_){data={detail:'Resposta inesperada do servidor.'}}
  if(!response.ok)throw new Error(typeof data.detail==='string'?data.detail:`Erro HTTP ${response.status}`);
  return data;
@@ -410,10 +414,16 @@ async function switchAthlete(athleteId){
 }
 async function initialize(){
  setSaveStatus('Carregando...','saving');
+ const auth=await api('/api/auth/me'); csrfToken=auth.csrfToken;
  athletes=await api('/api/athletes');
  if(!athletes.length)throw Error('Nenhum atleta disponível no banco de dados.');
  await switchAthlete(athletes[0].id);
 }
+$('logoutBtn').addEventListener('click',async()=>{
+ try{if(!(await saveQueue))throw Error('Há alterações não salvas.');
+  await api('/api/auth/logout',{method:'POST'});window.location.replace('/login');
+ }catch(error){toast(error.message||'Erro ao sair');}
+});
 $('athleteSelect').addEventListener('change',async e=>{
  try{await switchAthlete(e.target.value)}catch(error){refreshAthleteSelector();setSaveStatus('Erro ao carregar','error');toast(error.message)}
 });
