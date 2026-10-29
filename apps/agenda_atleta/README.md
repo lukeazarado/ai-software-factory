@@ -24,6 +24,11 @@ Abra `http://127.0.0.1:8000/` e autentique-se com usuário `admin` e a senha def
 
 A importação de backups antigos é **manual**: abra o HTML anterior, exporte o JSON; depois, no novo sistema, selecione o atleta desejado e use Importar JSON. A migração não apaga dados antigos do navegador.
 
+
+### Correção da escolinha (MVP 1.0.1)
+
+Os horários inseridos pelo catálogo Gol de Placa incluem `catalogId`. O campo agora é aceito e persistido pela API, mantendo a indicação **✓ Na grade** após atualizar a página. Bancos SQLite da versão anterior são atualizados automaticamente ao iniciar o servidor, sem apagar atletas, treinos ou biblioteca. **Antes de atualizar, com o servidor parado, faça uma cópia de `data/agenda_atleta.sqlite3`** (e, se existirem, seus arquivos `-wal` e `-shm`). A correção não recupera itens que o servidor já havia rejeitado com HTTP 422; após atualizar, inclua esses treinos novamente.
+
 ## Testes
 
 ```bash
