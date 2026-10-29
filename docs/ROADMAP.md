@@ -1,26 +1,25 @@
-# Roadmap
+# Roadmap da AI Software Factory
 
-## MVP 1.0 — incluído neste pacote
-- Instruções de orquestração para ChatGPT (4 papéis).
-- Executor Python com 4 agentes independentes em sequência, via OpenAI Agents SDK.
-- Ferramentas de escrita/leitura limitadas ao workspace do projeto.
-- Relatório de requisitos, arquitetura, implementação e QA.
-- Template web funcional e testes locais.
-- GitHub Actions para testes e deploy manual do template no Pages.
+## MVP 1.0 — concluído
+- ChatGPT como CTO Orquestrador e quatro especialistas: Product Owner, Arquiteto, Desenvolvedor e QA.
+- Runner Python com quatro agentes, workspace isolado por caminhos e relatório de qualidade.
+- GitHub com branch, PR e aprovação humana; template web e testes.
 
-## Próxima etapa — GitHub conectado ao fluxo
-- Criar repositório privado `ai-software-factory` e disponibilizar ao conector GitHub.
-- Importar o pacote e criar branch de feature e PR para cada alteração.
-- Revisão e merge por aprovação humana.
+## MVP 1.1 — Squad 2.0 (este PR)
+- Quinto agente **Tech Lead**, após QA, com revisão independente e parecer técnico fail-closed.
+- Checklist de PR: escopo, arquitetura, segurança, testes, manutenção e riscos.
+- Runner de cinco agentes gera relatório com achados, veredito e status para revisão humana.
+- Comando opcional `python -m factory.tech_lead` lê diffs via GitHub API (somente leitura) e gera relatório por PR/SHA.
+- Atualização das instruções do ChatGPT e AGENTS.md; testes de regressão sem chamadas de API.
 
-## Depois do MVP
-- Integração runner → GitHub por credenciais de instalação com escopo mínimo, em ambiente de execução confiável.
-- Jobs assíncronos, logs, limites de custo, políticas de aprovação e sandbox.
-- Suporte a backend Java/Spring Boot, banco PostgreSQL e deploy de apps dinâmicos.
-- Testes E2E no navegador e análise automatizada de segurança.
+## Próximas etapas (não incluídas neste PR)
+- Revisão TL disparada automaticamente por eventos de PR no GitHub Actions, com custos aprovados, limites e segredos protegidos.
+- Checks obrigatórios de CI/branch protection; regras de aprovação humana e segregação de funções.
+- Runner isolado, logs, limites de custo, gestão de incidentes e observabilidade.
+- Backend Java/Spring Boot, PostgreSQL e deploy de aplicações dinâmicas conforme demanda.
+- Testes E2E reais em navegador e revisão de segurança aprofundada.
 
 ## Limites
-- ChatGPT não executa automaticamente o script Python a cada mensagem.
-- O runner exige OPENAI_API_KEY e ambiente Python externo.
-- O deploy no Pages exige repositório GitHub, Pages habilitado e disparo manual.
-- Sites estáticos não têm autenticação segura ou banco de dados no servidor.
+- A conversa ChatGPT **não executa automaticamente** agentes externos ou pipelines a cada mensagem.
+- O runner requer OPENAI_API_KEY; revisão de PR por CLI também requer GITHUB_TOKEN.
+- Nenhum parecer do Tech Lead, ainda que favorável, equivale à aprovação humana para merge ou deploy.
