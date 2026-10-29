@@ -125,3 +125,61 @@ def test_html_keeps_original_sections_and_server_persistence(client):
     assert 'localStorage.setItem(KEY' not in text
     assert "/api/athletes" in text
     assert 'Salvo no banco' in text
+
+
+def test_academy_catalog_item_is_saved_and_returned(client):
+    """Regression: Gol de Placa uses catalogId, previously rejected with HTTP 422."""
+    athlete = first_athlete(client)
+    slot = {**sample_item(), "id": "catalog-event-1", "catalogId": "t2-ter"}
+    response = client.put(f"/api/athletes/{athlete}/state", json={
+        "revision": 0, "events": [slot], "available": []
+    })
+    assert response.status_code == 200, response.text
+    saved = client.get(f"/api/athletes/{athlete}/state").json()
+    assert saved["revision"] == 1
+    assert saved["events"] == [slot]
+
+
+def test_existing_sqlite_schema_is_migrated_without_data_loss(tmp_path):
+    """Migrates the published MVP schema while retaining events and athletes."""
+    db = tmp_path / "old.sqlite3"
+    with sqlite3.connect(db) as conn:
+        conn.executescript("""
+        CREATE TABLE athletes (id TEXT PRIMARY KEY, name TEXT NOT NULL, revision INTEGER NOT NULL DEFAULT 0);
+        CREATE TABLE items (
+            athlete_id TEXT NOT NULL REFERENCES athletes(id) ON DELETE CASCADE,
+            collection TEXT NOT NULL CHECK(collection IN ('events', 'available')),
+            id TEXT NOT NULL, position INTEGER NOT NULL, title TEXT NOT NULL,
+            type TEXT NOT NULL, school TEXT NOT NULL, day INTEGER NOT NULL,
+            start TEXT NOT NULL, end TEXT NOT NULL, location TEXT NOT NULL,
+            notes TEXT NOT NULL, source_id TEXT,
+            PRIMARY KEY(athlete_id, collection, id));
+        INSERT INTO athletes (id,name,revision) VALUES ('legacy','Atleta Antigo',1);
+        INSERT INTO items VALUES ('legacy','events','old',0,'Treino existente','training','Escola',1,'17:00','18:00','','',NULL);
+        """)
+    app = create_app(db, password=PASSWORD)
+    auth = {"Authorization": "Basic " + base64.b64encode(f"admin:{PASSWORD}".encode()).decode()}
+    with TestClient(app) as http:
+        original = http.get("/api/athletes/legacy/state", headers=auth)
+        assert original.status_code == 200
+        assert original.json()["events"][0]["title"] == "Treino existente"
+        assert original.json()["revision"] == 1
+        old = original.json()["events"][0]
+        new = {**sample_item("new"), "catalogId": "t2-ter"}
+        response = http.put("/api/athletes/legacy/state", headers=auth,
+                            json={"revision": 1, "events": [old, new], "available": []})
+        assert response.status_code == 200, response.text
+        persisted = http.get("/api/athletes/legacy/state", headers=auth).json()
+        assert len(persisted["events"]) == 2
+        assert persisted["events"][1]["catalogId"] == "t2-ter"
+    with sqlite3.connect(db) as conn:
+        assert "catalog_id" in {row[1] for row in conn.execute("PRAGMA table_info(items)")}
+        assert conn.execute("SELECT COUNT(*) FROM athletes").fetchone()[0] == 1
+
+
+def test_invalid_catalog_id_remains_rejected(client):
+    athlete = first_athlete(client)
+    invalid = {**sample_item(), "catalogId": "x" * 101}
+    response = client.put(f"/api/athletes/{athlete}/state", json={
+        "revision": 0, "events": [invalid], "available": []})
+    assert response.status_code == 422
