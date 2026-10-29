@@ -138,6 +138,14 @@ def test_academy_catalog_item_is_saved_and_returned(client):
     saved = client.get(f"/api/athletes/{athlete}/state").json()
     assert saved["revision"] == 1
     assert saved["events"] == [slot]
+    # A later ordinary save must also work after the catalog item was persisted.
+    more = client.put(f"/api/athletes/{athlete}/state", json={
+        "revision": 1, "events": [slot, sample_item("after-catalog")], "available": []
+    })
+    assert more.status_code == 200, more.text
+    reloaded = client.get(f"/api/athletes/{athlete}/state").json()
+    assert reloaded["events"][0]["catalogId"] == "t2-ter"
+    assert len(reloaded["events"]) == 2
 
 
 def test_existing_sqlite_schema_is_migrated_without_data_loss(tmp_path):
