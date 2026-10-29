@@ -10,8 +10,8 @@
 
 ## Ameaças ainda fora do MVP
 
-- O Tailwind CDN e código inline reduzem proteção CSP. Antes de liberar publicamente, empacotar JS/CSS local e aplicar CSP estrita e SRI quando necessário.
-- Chave simétrica única: comprometimento do servidor ou da chave permite decriptação de dados; backup seguro e rotação de chave ainda não implementados.
+- Tailwind CDN e scripts inline removidos: JS/CSS agora são servidos apenas da mesma origem, com CSP estrita, sem `unsafe-inline`. O comportamento visual ainda requer homologação no navegador com DevTools e CSP ativa.
+- Chave simétrica única: comprometimento do servidor ou da chave permite decriptação de dados; backup consistente incluído, mas proteção externa das cópias e rotação de chave ainda requerem procedimento operacional.
 - Sem multi-tenancy organizacional, roles, auditoria de acesso, prevenção adicional de abuso, monitoramento, retenção/expurgo formal, DPA/termos e incident response.
 - Backup JSON exportado contém dados em texto claro; tratar como dados pessoais. Campos não cifrados incluem horários, tipo e IDs técnicos (com eventual inferência de rotinas).
 - Login de qualquer conta Google configurada/autorizada cria **seu próprio** espaço isolado. Se o sistema deve ser restrito a convidados, implementar allowlist/convites em etapa posterior.
@@ -23,3 +23,11 @@
 3. Validar políticas de privacidade, tratamento de dados de menores e medidas LGPD.
 4. Criar testes E2E em desktop/mobile, logging seguro, limites de requests, políticas de sessão e conta.
 5. Obter aprovação humana específica para custos, credenciais, migração e deploy.
+
+## Revisão pós-ajustes do TL
+
+- **TL-01 (frontend)**: removidos CDN, scripts e estilos inline; CSP restrita e arquivos locais, com testes estáticos e de API. Compatibilidade visual depende de teste E2E manual.
+- **TL-02 (Google real)**: pendente com cliente OAuth e HTTPS configurados. Mock de identidade não é evidência de integração real.
+- **TL-03 (rate limit)**: 10 tentativas/10min por IP de socket e 500 fluxos globais pendentes. Configure limitação de abuso também no proxy confiável; não use `X-Forwarded-For` sem confiança explícita.
+- **TL-04 (classificação)**: horários, dias e categorias mantidos legíveis por compatibilidade, embora possam revelar rotinas de menores. Exige decisão de privacidade antes de produção.
+- **TL-05 (backup)**: procedimento SQLite consistente (API `.backup`) implementado e verificado por teste de restauração com a mesma chave. JSON continua em texto claro e demanda armazenamento protegido.
