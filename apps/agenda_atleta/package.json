@@ -1,0 +1,8 @@
+{
+  "name": "agenda-atleta-css-builder",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Somente para regenerar CSS local. Nao faz parte do runtime Python.",
+  "scripts": {"build:css": "node build_css.cjs"},
+  "devDependencies": {"tailwindcss": "4.1.10"}
+}
