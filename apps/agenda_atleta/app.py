@@ -20,10 +20,14 @@ import uuid
 
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from fastapi import Depends, FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response
+from fastapi.responses import FileResponse, RedirectResponse, Response
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-WEB_FILE = Path(__file__).resolve().parent / "web" / "index.html"
+WEB_DIR = Path(__file__).resolve().parent / "web"
+WEB_FILE = WEB_DIR / "index.html"
+LOGIN_WINDOW = 10 * 60
+LOGIN_LIMIT = 10
+LOGIN_MAX_PENDING = 500
 TIME = re.compile(r"^(?:[01][0-9]|2[0-3]):[0-5][0-9]$")
 SESSION_TTL = 12 * 60 * 60
 OAUTH_TTL = 10 * 60
@@ -181,6 +185,10 @@ def create_app(db_path=None, *, encryption_key=None, client_id=None, client_secr
             state_hash TEXT PRIMARY KEY, verifier TEXT NOT NULL,
             nonce TEXT NOT NULL, expires INTEGER NOT NULL
         );
+        CREATE TABLE IF NOT EXISTS login_attempts (
+            ip_hash TEXT PRIMARY KEY, window_start INTEGER NOT NULL,
+            attempts INTEGER NOT NULL
+        );
         CREATE TABLE IF NOT EXISTS sessions (
             token_hash TEXT PRIMARY KEY, owner_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
             csrf TEXT NOT NULL, expires INTEGER NOT NULL
@@ -227,8 +235,8 @@ def create_app(db_path=None, *, encryption_key=None, client_id=None, client_secr
             "Cache-Control": "no-store", "Pragma": "no-cache",
             "X-Content-Type-Options": "nosniff", "X-Frame-Options": "DENY",
             "Referrer-Policy": "no-referrer", "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
-            # The original HTML retains inline Tailwind CDN; tighten to hashed/local assets before production.
-            "Content-Security-Policy": "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'; form-action 'self'",
+            # No third-party executable code and no inline scripts/styles in HTML.
+            "Content-Security-Policy": "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'; form-action 'self'",
         })
         if secure_cookie:
             response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
@@ -256,20 +264,52 @@ def create_app(db_path=None, *, encryption_key=None, client_id=None, client_secr
             raise HTTPException(404, "Atleta não encontrado")
         return row
 
-    @app.get("/login", response_class=HTMLResponse)
+    @app.get("/login", include_in_schema=False)
     def login_page():
-        return """<!doctype html><html lang='pt-BR'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>Entrar | Agenda do Atleta</title></head><body style='margin:0;min-height:100vh;background:#111e35;color:white;font-family:system-ui;display:grid;place-items:center'><main style='text-align:center;padding:32px;background:#203454;border-radius:20px;max-width:380px'><h1>Agenda do Atleta</h1><p>Entre para acessar somente os seus atletas.</p><a href='/auth/google/start' style='display:inline-block;padding:14px 20px;border-radius:12px;background:white;color:#111e35;font-weight:bold;text-decoration:none'>Entrar com Google</a></main></body></html>"""
+        return FileResponse(WEB_DIR / "login.html", media_type="text/html; charset=utf-8")
+
+    @app.get("/static/login.css", include_in_schema=False)
+    def login_styles():
+        return FileResponse(WEB_DIR / "login.css", media_type="text/css; charset=utf-8")
+
+    @app.get("/static/app.css", include_in_schema=False)
+    def app_styles(session=Depends(session_for)):
+        return FileResponse(WEB_DIR / "app.css", media_type="text/css; charset=utf-8")
+
+    @app.get("/static/app.js", include_in_schema=False)
+    def app_javascript(session=Depends(session_for)):
+        return FileResponse(WEB_DIR / "app.js", media_type="text/javascript; charset=utf-8")
 
     @app.get("/auth/google/start")
-    def login_start():
+    def login_start(request: Request):
+        # Bound OAuth flow creation at the authoritative socket peer, never X-Forwarded-For.
+        # A shared proxy address can aggregate users: also enforce limits at the trusted edge.
+        peer = request.client.host if request.client else "unknown"
+        ip_hash = hmac.new(key, b"login-peer:" + peer.encode(), sha256).hexdigest()
+        now = int(time.time())
         state = secrets.token_urlsafe(32)
         verifier = secrets.token_urlsafe(48)
         nonce = secrets.token_urlsafe(32)
         challenge = base64.urlsafe_b64encode(sha256(verifier.encode()).digest()).decode().rstrip("=")
         with connection() as conn:
-            conn.execute("DELETE FROM login_flows WHERE expires < ?", (int(time.time()),))
-            conn.execute("INSERT INTO login_flows(state_hash,verifier,nonce,expires) VALUES(?,?,?,?)",
-                         (sha256(state.encode()).hexdigest(), verifier, nonce, int(time.time()) + OAUTH_TTL))
+            conn.execute("BEGIN IMMEDIATE")
+            try:
+                conn.execute("DELETE FROM login_flows WHERE expires <= ?", (now,))
+                conn.execute("DELETE FROM login_attempts WHERE window_start <= ?", (now - LOGIN_WINDOW,))
+                attempt = conn.execute("SELECT window_start,attempts FROM login_attempts WHERE ip_hash=?", (ip_hash,)).fetchone()
+                if attempt is not None and attempt["attempts"] >= LOGIN_LIMIT:
+                    remaining = max(1, attempt["window_start"] + LOGIN_WINDOW - now)
+                    raise HTTPException(429, "Muitas tentativas de login. Aguarde para tentar novamente.", headers={"Retry-After": str(remaining)})
+                if conn.execute("SELECT COUNT(*) FROM login_flows").fetchone()[0] >= LOGIN_MAX_PENDING:
+                    raise HTTPException(503, "Login temporariamente indisponível", headers={"Retry-After": "60"})
+                conn.execute("""INSERT INTO login_attempts(ip_hash,window_start,attempts) VALUES(?,?,1)
+                    ON CONFLICT(ip_hash) DO UPDATE SET attempts=attempts+1""", (ip_hash, now))
+                conn.execute("INSERT INTO login_flows(state_hash,verifier,nonce,expires) VALUES(?,?,?,?)",
+                             (sha256(state.encode()).hexdigest(), verifier, nonce, now + OAUTH_TTL))
+                conn.commit()
+            except Exception:
+                conn.rollback()
+                raise
         params = {"client_id": client_id, "redirect_uri": redirect_uri,
                   "response_type": "code", "scope": "openid email", "state": state,
                   "nonce": nonce, "code_challenge": challenge, "code_challenge_method": "S256"}
