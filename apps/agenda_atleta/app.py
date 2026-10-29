@@ -31,6 +31,7 @@ class Item(BaseModel):
     location: str = Field(default="", max_length=100)
     notes: str = Field(default="", max_length=300)
     sourceId: str | None = Field(default=None, max_length=100)
+    catalogId: str | None = Field(default=None, max_length=100)
 
     @field_validator("type")
     @classmethod
@@ -108,11 +109,15 @@ def create_app(db_path: str | Path | None = None, password: str | None = None) -
             id TEXT NOT NULL, position INTEGER NOT NULL, title TEXT NOT NULL,
             type TEXT NOT NULL, school TEXT NOT NULL, day INTEGER NOT NULL,
             start TEXT NOT NULL, end TEXT NOT NULL, location TEXT NOT NULL,
-            notes TEXT NOT NULL, source_id TEXT,
+            notes TEXT NOT NULL, source_id TEXT, catalog_id TEXT,
             PRIMARY KEY(athlete_id, collection, id)
         );
         CREATE INDEX IF NOT EXISTS idx_items_athlete ON items(athlete_id, collection, position);
         """)
+        # Upgrade SQLite databases created by MVP 1.0 without destroying existing activities.
+        existing_columns = {row["name"] for row in conn.execute("PRAGMA table_info(items)")}
+        if "catalog_id" not in existing_columns:
+            conn.execute("ALTER TABLE items ADD COLUMN catalog_id TEXT")
         if not conn.execute("SELECT 1 FROM athletes LIMIT 1").fetchone():
             conn.execute("INSERT INTO athletes (id, name) VALUES (?, ?)", (uuid.uuid4().hex, "Atleta principal"))
 
@@ -195,6 +200,8 @@ def create_app(db_path: str | Path | None = None, password: str | None = None) -
                             location=row["location"], notes=row["notes"])
                 if row["source_id"]:
                     item["sourceId"] = row["source_id"]
+                if row["catalog_id"]:
+                    item["catalogId"] = row["catalog_id"]
                 result[row["collection"]].append(item)
             return result
 
@@ -210,10 +217,10 @@ def create_app(db_path: str | Path | None = None, password: str | None = None) -
                 for collection in ("events", "available"):
                     for position, item in enumerate(getattr(data, collection)):
                         conn.execute("""INSERT INTO items
-                            (athlete_id,collection,id,position,title,type,school,day,start,end,location,notes,source_id)
-                            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                            (athlete_id,collection,id,position,title,type,school,day,start,end,location,notes,source_id,catalog_id)
+                            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                             (athlete_id, collection, item.id, position, item.title, item.type, item.school,
-                             item.day, item.start, item.end, item.location, item.notes, item.sourceId))
+                             item.day, item.start, item.end, item.location, item.notes, item.sourceId, item.catalogId))
                 new_revision = athlete["revision"] + 1
                 conn.execute("UPDATE athletes SET revision=? WHERE id=?", (new_revision, athlete_id))
                 conn.commit()
