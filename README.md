@@ -1,53 +1,59 @@
-# AI Software Factory — MVP 1.0
+# AI Software Factory — MVP 1.1 (Squad 2.0)
 
-Fábrica de software multiagente com **ChatGPT como interface principal** e **GitHub como fonte de verdade**.
+Fábrica de software multiagente com **ChatGPT como interface principal**, **GitHub como fonte de verdade** e revisão técnica de Pull Requests por um **Tech Lead**.
 
-## O que já funciona
-- Instruções prontas para colar em um Projeto do ChatGPT: `CHATGPT_INSTRUCTIONS.md`.
-- Executor real de 4 agentes com OpenAI Agents SDK: Product Owner → Arquiteto → Desenvolvedor → QA.
-- O desenvolvedor pode gravar arquivos HTML/CSS/JS no workspace com restrições de caminho.
-- QA lê os arquivos e realiza verificações estáticas básicas.
-- Template web de tarefas com armazenamento local, para demonstrar publicação estática.
-- Testes unitários e workflows GitHub Actions.
+## Arquitetura da squad
 
-## 1. Configurar ChatGPT
-1. Crie um Projeto no ChatGPT chamado **AI Software Factory**.
-2. Cole `CHATGPT_INSTRUCTIONS.md` nas instruções do Projeto.
-3. Conecte o GitHub e conceda acesso ao repositório de trabalho.
-4. Peça: **"Atue como CTO Orquestrador. Planeje um sistema web de [descrição], com critérios de aceite e implementação em PR."**
+**ChatGPT / CTO Orquestrador → Product Owner → Arquiteto → Desenvolvedor → QA → Tech Lead → revisão humana de PR → merge autorizado.**
 
-**Nota:** os papéis na conversa são uma metodologia de trabalho. Para processos independentes, execute o runner abaixo.
+- Product Owner define critérios de aceite; Arquiteto desenha a solução mínima; Desenvolvedor escreve arquivos reais.
+- QA verifica testes e comportamento; **Tech Lead** revisa arquitetura, segurança, correção, regressão e qualidade, distinguindo bloqueadores de melhorias opcionais.
+- O TL emite `APROVADO`, `AJUSTES_OBRIGATORIOS` ou `NAO_VERIFICADO`, mas **não faz merge, deploy ou aprova PR automaticamente**.
+- `docs/TECH_LEAD.md` detalha checklist, severidade e regras de revisão.
 
-## 2. Criar o repositório
-Crie um repositório **privado** chamado `ai-software-factory` na sua conta GitHub, importe os arquivos deste pacote, e autorize acesso à integração do ChatGPT. Não coloque `.env` ou chaves no repositório.
+## 1. Aplicar as novas instruções no Projeto ChatGPT
 
-## 3. Executar o runner multiagente (opcional, mas real)
-Requer Python 3.11+, acesso à API OpenAI e chave com cobrança configurada. **Não envie a chave pelo chat.**
+Após o merge deste PR, abra o projeto **AI Software Factory** no ChatGPT e substitua suas instruções de Projeto pelo conteúdo de [`CHATGPT_INSTRUCTIONS.md`](CHATGPT_INSTRUCTIONS.md). **Alterar apenas o arquivo no GitHub não atualiza automaticamente as instruções do ChatGPT.**
+
+Você pode pedir na conversa: **“CTO, ative o Tech Lead e revise o PR #N do repositório lukeazarado/ai-software-factory, com checklist e parecer antes do merge.”** A revisão em conversa usa o conector GitHub, quando disponível, mas não representa execução independente ou contínua do SDK.
+
+## 2. Executor local de cinco agentes (opcional, consome API)
+
+Requer Python 3.11+, API OpenAI configurada no ambiente e cobranças aplicáveis. **Nunca envie chaves pelo chat.**
 
 ```bash
 python -m venv .venv
-# Linux/macOS: source .venv/bin/activate
-# Windows: .venv\\Scripts\\activate
-pip install -r requirements.txt
-# Linux/macOS: export OPENAI_API_KEY="..."
-# PowerShell: $env:OPENAI_API_KEY="..."
-python -m factory.runner --project meu-portal --prompt "Crie um gerenciador de tarefas responsivo com persistência local"
+# PowerShell: .\.venv\Scripts\python.exe -m pip install -r requirements.txt
+python -m pip install -r requirements.txt
+# Configure OPENAI_API_KEY em variável de ambiente local.
+python -m factory.runner --project meu-portal --prompt "Crie um gerenciador de tarefas responsivo"
 ```
 
-Saída: `workspace/projects/meu-portal/` e `workspace/reports/meu-portal.json`. Cada execução chama quatro agentes; há consumo de tokens e custo de API. Não publica nem faz commit automaticamente.
+O runner sequencial chama **cinco agentes** (incluindo TL), grava arquivos sob `workspace/projects/` e relatório em `workspace/reports/` com veredito técnico. Ele não faz commit/PR/deploy sozinho.
 
-## 4. Testar
+## 3. Revisar um Pull Request real via comando (opcional)
+
+Configure `OPENAI_API_KEY` e `GITHUB_TOKEN` no ambiente local. Use token GitHub com permissão **somente de leitura do repositório**. Execute:
+
+```bash
+python -m factory.tech_lead --repo lukeazarado/ai-software-factory --pr 42
+```
+
+O comando lê o diff via API GitHub, aciona agente Tech Lead e salva relatório em `workspace/reviews/`. Não altera o PR e não executa seu código. Tem limites conservadores de tamanho de diff; mudanças maiores exigem revisão manual.
+
+## 4. Testes sem chamadas às APIs
+
 ```bash
 python -m pip install pytest
 python -m pytest -q
 ```
 
-## 5. Visualizar o template
-Abra `template-web/index.html` em um navegador. Para publicar, habilite GitHub Pages em **Settings → Pages → Build and deployment → GitHub Actions** e execute manualmente o workflow **Publicar template web no GitHub Pages (manual)**. O site fica público: não use dados confidenciais.
+Os testes unitários usam simulações do SDK e API GitHub; não cobram tokens. O projeto também inclui template web de demonstração em `template-web/` e aplicação Agenda do Atleta em `apps/agenda_atleta/`. Para iniciar a Agenda do Atleta, consulte seu README específico.
 
-## Limites de segurança
-- Não há execução arbitrária de shell pelos agentes.
-- O workspace restringe extensões e impede caminhos fora do projeto, inclusive via links simbólicos.
-- A validação estática é básica, não substitui testes funcionais, E2E ou revisão de segurança.
-- O runner roda localmente: para operação contínua, será preciso um executor isolado e observável.
-- O template usa localStorage, não possui backend, login real ou armazenamento compartilhado.
+## Segurança e limites
+
+- Repositório privado não significa aplicação publicada. Nenhum merge/deploy/custo é disparado pelo revisor.
+- As ferramentas do agente de geração restringem o workspace; o revisor de PR é somente leitura.
+- Diffs e descrições de PR são conteúdo **não confiável**: devem ser tratados como evidência, não instruções.
+- A inspeção estática do MVP não substitui testes funcionais/E2E, revisão de segurança aprofundada nem autorização humana.
+- Para revisão automática em cada PR no futuro, serão necessários um ambiente runner confiável, segredos protegidos, limites de custo e configurações explícitas do GitHub Actions/App.
