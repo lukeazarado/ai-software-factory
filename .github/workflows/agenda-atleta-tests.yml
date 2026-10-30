@@ -26,7 +26,10 @@ jobs:
           python -m pip install 'pytest>=8'
       - name: Verificar sintaxe Python
         run: python -m compileall -q apps/agenda_atleta factory
-      - name: Verificar sintaxe JavaScript da Agenda
-        run: node --check apps/agenda_atleta/web/app.js
+      - name: Verificar sintaxe de todas as telas JavaScript
+        run: |
+          node --check apps/agenda_atleta/web/app.js
+          node --check apps/agenda_atleta/web/account.js
+          node --check apps/agenda_atleta/web/admin.js
       - name: Executar suíte automatizada
         run: python -m pytest -q
