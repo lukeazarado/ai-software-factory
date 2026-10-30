@@ -110,3 +110,10 @@ def test_comment_update_only_bot_identity(monkeypatch):
     existing['user']['login'] = 'another-user'
     review.upsert_comment(REPO, 6, SHA, 'updated', 'token')
     assert calls[1][1] == 'POST'
+
+
+def test_missing_head_repository_fails_closed(monkeypatch):
+    event, _ = sample()
+    event['workflow_run']['head_repository'] = None
+    monkeypatch.setattr(review, 'github_json', lambda *a: (_ for _ in ()).throw(AssertionError('API must not be called')))
+    assert review.valid_target(event, REPO, 'token') is None
