@@ -11,6 +11,7 @@ from pathlib import Path
 from urllib.parse import urlencode, urlparse
 import base64
 import hmac
+import logging
 import os
 import re
 import secrets
@@ -334,12 +335,19 @@ def create_app(db_path=None, *, encryption_key=None, client_id=None, client_secr
             except Exception:
                 conn.rollback()
                 raise
+        stage = "token_exchange"
         try:
             tokens = token_exchange(code, flow["verifier"])
+            stage = "id_token_verification"
             claims = token_verifier(tokens["id_token"], client_id)
             if not isinstance(claims, dict) or not isinstance(claims.get("sub"), str) or not claims["sub"] or not secrets.compare_digest(str(claims.get("nonce", "")), flow["nonce"]):
                 raise ValueError("Token sem identidade ou nonce válido")
         except Exception as exc:
+            # Report only the phase and exception class. Never log codes, tokens, claims or secrets.
+            logging.getLogger(__name__).warning(
+                "Google OAuth callback failed: stage=%s exception=%s",
+                stage, type(exc).__name__,
+            )
             raise HTTPException(401, "Falha ao verificar identidade Google") from exc
         owner_id = owner_key(claims["sub"])
         token = secrets.token_urlsafe(48)
