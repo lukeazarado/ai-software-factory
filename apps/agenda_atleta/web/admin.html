@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#101b33">
+<title>Administração | Agenda do Atleta Pro v2.0.0-rc.1</title>
+<link rel="stylesheet" href="/static/admin.css">
+<script defer src="/static/admin.js"></script>
+</head>
+<body>
+<div class="shell">
+<aside class="sidebar" aria-label="Navegação administrativa">
+  <div class="identity"><div class="brandmark">A</div><div><strong>Agenda<span>Atleta</span></strong><small>ADMINISTRAÇÃO</small></div></div>
+  <div class="navtitle">PAINEL DE CONTROLE</div>
+  <a class="navitem selected" href="#parameters">⚙ &nbsp; Parametrizações</a>
+  <a class="navitem" href="#obligations">▤ &nbsp; Obrigações Brasil</a>
+  <a class="navitem" href="#audit">◷ &nbsp; Histórico de mudanças</a>
+  <div class="spacer"></div>
+  <div class="navnote"><strong>Ambiente controlado</strong><p>A configuração é centralizada no mesmo SQLite utilizado pela Agenda.</p></div>
+  <a class="back" href="/">← Voltar à Agenda</a>
+</aside>
+<main class="main">
+  <header class="topbar"><span>Produto <span class="chevron">/</span> Administração</span><span class="release">v2.0.0-rc.1 · Homologação</span></header>
+  <div class="content">
+    <div class="heading"><div><span class="eyebrow">CONSOLE ADMINISTRATIVO</span><h1>Parametrização do produto</h1><p class="lead">Configure a operação e acompanhe as obrigações sem alterar código ou criar outro banco.</p></div><span class="role">ACESSO RESTRITO</span></div>
+    <div class="notice" role="note"><strong>Liberação comercial bloqueada</strong><span>Registros administrativos não substituem avaliação jurídica, aprovação de produção nem controles para dados de menores.</span></div>
+    <div class="metrics"><article class="metric"><span>Obrigações mapeadas</span><strong id="totalCount">—</strong><small>Checklist brasileiro</small></article><article class="metric"><span>Em análise</span><strong id="reviewCount">—</strong><small>Aguardando documentação</small></article><article class="metric"><span>Evidências registradas</span><strong id="recordedCount">—</strong><small>Não é certificação</small></article><article class="metric status-metric"><span>Status de mercado</span><strong>Não liberado</strong><small>Gate técnico + revisão humana</small></article></div>
+    <section id="parameters" class="section"><div class="section-head"><div><h2>Configurações gerais</h2><p>Identidade, fornecedor, documentos legais e políticas operacionais.</p></div><span class="subtle">Controle de versão por campo</span></div><div id="settings" class="settings-grid"><div class="loading">Carregando parâmetros...</div></div></section>
+    <section id="obligations" class="section"><div class="section-head"><div><h2>Obrigações e evidências</h2><p>Registre o responsável, o documento de referência e o andamento de cada obrigação.</p></div><span class="subtle">Não significa aprovação automática</span></div><div id="obligationsList" class="obligations"><div class="loading">Carregando obrigações...</div></div></section>
+    <section id="audit" class="section"><div class="section-head"><div><h2>Histórico de alterações</h2><p>Trilha de auditoria sem armazenar valores antigos ou credenciais.</p></div></div><div id="history" class="history">Carregando histórico...</div></section>
+    <footer>Agenda do Atleta Pro · Console administrativo · Dados e parâmetros no SQLite seguro</footer>
+  </div>
+</main>
+</div>
+<div id="message" class="toast" role="status" aria-live="polite"></div>
+</body></html>
