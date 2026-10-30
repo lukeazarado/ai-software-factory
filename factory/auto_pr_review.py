@@ -23,7 +23,7 @@ def valid_target(event: dict, repo: str, token: str) -> tuple[dict, dict] | None
     run = event.get('workflow_run') or {}
     if run.get('event') != 'pull_request' or run.get('status') != 'completed':
         return None
-    if run.get('head_repository', {}).get('full_name') != repo:
+    if (run.get('head_repository') or {}).get('full_name') != repo:
         return None  # don't permit privileged workflow to review forks
     sha = run.get('head_sha', '')
     if not SHA_PATTERN.fullmatch(sha):
