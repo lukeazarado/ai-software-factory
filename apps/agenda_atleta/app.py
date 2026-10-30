@@ -11,6 +11,7 @@ from pathlib import Path
 from urllib.parse import urlencode, urlparse
 import base64
 import hmac
+import json
 import logging
 import os
 import re
@@ -191,7 +192,7 @@ def create_app(db_path=None, *, encryption_key=None, client_id=None, client_secr
             id TEXT NOT NULL, position INTEGER NOT NULL,
             title_enc TEXT NOT NULL, school_enc TEXT NOT NULL,
             location_enc TEXT NOT NULL, notes_enc TEXT NOT NULL,
-            type TEXT NOT NULL, day INTEGER NOT NULL, start TEXT NOT NULL, end TEXT NOT NULL,
+            type TEXT NOT NULL, schedule_enc TEXT NOT NULL,
             source_id TEXT, catalog_id TEXT,
             PRIMARY KEY (athlete_id, collection, id)
         );
@@ -225,6 +226,45 @@ def create_app(db_path=None, *, encryption_key=None, client_id=None, client_secr
         else:
             conn.execute("INSERT INTO app_config(key,value) VALUES(?,?)",
                          ("encryption_check", encrypted("configured", "app_config:encryption_check")))
+        # V2: encrypt day/start/end, which can reveal the routines of minors.
+        # Migrate older owned databases only AFTER verifying the encryption key.
+        cols = {col[1] for col in conn.execute("PRAGMA table_info(items)")}
+        if "schedule_enc" not in cols:
+            if not {"day", "start", "end"}.issubset(cols):
+                raise RuntimeError("Esquema de horários incompatível; restaure backup e revise migração")
+            conn.execute("BEGIN IMMEDIATE")
+            try:
+                conn.execute("""CREATE TABLE items_schedule_v2 (
+                    athlete_id TEXT NOT NULL REFERENCES athletes(id) ON DELETE CASCADE,
+                    collection TEXT NOT NULL CHECK(collection IN ('events','available')),
+                    id TEXT NOT NULL, position INTEGER NOT NULL,
+                    title_enc TEXT NOT NULL, school_enc TEXT NOT NULL,
+                    location_enc TEXT NOT NULL, notes_enc TEXT NOT NULL,
+                    type TEXT NOT NULL, schedule_enc TEXT NOT NULL,
+                    source_id TEXT, catalog_id TEXT,
+                    PRIMARY KEY (athlete_id, collection, id)
+                )""")
+                legacy_rows = conn.execute("SELECT * FROM items").fetchall()
+                for row in legacy_rows:
+                    schedule = json.dumps({"day": row["day"], "start": row["start"], "end": row["end"]},
+                                          separators=(",", ":"), ensure_ascii=False)
+                    aad = f"items:{row['athlete_id']}:{row['collection']}:{row['id']}:schedule"
+                    conn.execute("""INSERT INTO items_schedule_v2 (
+                        athlete_id,collection,id,position,title_enc,school_enc,location_enc,notes_enc,
+                        type,schedule_enc,source_id,catalog_id
+                    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""", (
+                        row["athlete_id"], row["collection"], row["id"], row["position"],
+                        row["title_enc"], row["school_enc"], row["location_enc"], row["notes_enc"],
+                        row["type"], encrypted(schedule, aad), row["source_id"], row["catalog_id"]
+                    ))
+                conn.execute("DROP TABLE items")
+                conn.execute("ALTER TABLE items_schedule_v2 RENAME TO items")
+                conn.commit()
+            except Exception:
+                conn.rollback()
+                raise
+        elif {"day", "start", "end"} & cols:
+            raise RuntimeError("Esquema híbrido pode expor horários; revisão manual necessária")
     if os.name == "posix":
         os.chmod(db, 0o600)
 
