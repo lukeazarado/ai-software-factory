@@ -331,3 +331,45 @@ def test_account_deletion_requires_csrf_and_exact_confirmation(setup):
             with sqlite3.connect(db) as conn:
                 assert conn.execute("SELECT COUNT(*) FROM users").fetchone()[0] == 1
                 assert conn.execute("SELECT COUNT(*) FROM athletes").fetchone()[0] == 1
+
+def test_privacy_notice_and_explicit_adult_acknowledgement(setup):
+    app, db, _, claims = setup
+    with TestClient(app) as client:
+        assert client.get("/account").status_code == 401
+        assert client.get("/api/privacy").status_code == 401
+        csrf = sign_in(client, db, claims, "privacy-user")
+        notice = client.get("/api/privacy")
+        assert notice.status_code == 200
+        assert notice.json()["status"] == "draft_pending_legal_review"
+        assert client.get("/account").status_code == 200
+        assert client.get("/static/account.js").status_code == 200
+        assert client.get("/static/account.css").status_code == 200
+        assert not client.get("/api/privacy/ack").json()["acknowledged"]
+        invalid = client.post("/api/privacy/ack", json={"read_notice": True, "responsible_adult": True})
+        assert invalid.status_code == 403
+        invalid = client.post("/api/privacy/ack", headers={"X-CSRF-Token": csrf},
+                              json={"read_notice": True, "responsible_adult": False})
+        assert invalid.status_code == 400
+        acknowledged = client.post("/api/privacy/ack", headers={"X-CSRF-Token": csrf},
+                                    json={"read_notice": True, "responsible_adult": True})
+        assert acknowledged.status_code == 200
+        assert acknowledged.json()["acknowledged"]
+        assert client.get("/api/privacy/ack").json()["adult_statement"] is True
+        with sqlite3.connect(db) as conn:
+            assert conn.execute("SELECT COUNT(*) FROM privacy_ack").fetchone()[0] == 1
+
+
+def test_privacy_declaration_is_scoped_and_erased_with_owner(setup):
+    app, db, _, claims = setup
+    with TestClient(app) as alice:
+        csrf_a = sign_in(alice, db, claims, "ack-alice")
+        assert alice.post("/api/privacy/ack", headers={"X-CSRF-Token":csrf_a},
+                          json={"read_notice":True,"responsible_adult":True}).status_code == 200
+        with TestClient(app) as bob:
+            sign_in(bob, db, claims, "ack-bob")
+            assert not bob.get("/api/privacy/ack").json()["acknowledged"]
+            assert alice.request("DELETE", "/api/account", headers={"X-CSRF-Token":csrf_a},
+                                  json={"confirmation":"EXCLUIR_MINHA_CONTA_E_ATLETAS"}).status_code == 204
+            with sqlite3.connect(db) as conn:
+                assert conn.execute("SELECT COUNT(*) FROM privacy_ack").fetchone()[0] == 0
+            assert bob.get("/api/athletes").status_code == 200
