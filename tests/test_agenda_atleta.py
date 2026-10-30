@@ -373,3 +373,63 @@ def test_privacy_declaration_is_scoped_and_erased_with_owner(setup):
             with sqlite3.connect(db) as conn:
                 assert conn.execute("SELECT COUNT(*) FROM privacy_ack").fetchone()[0] == 0
             assert bob.get("/api/athletes").status_code == 200
+
+def test_schedule_is_ciphertext_and_roundtrips(setup):
+    app, db, _, claims = setup
+    with TestClient(app) as client:
+        csrf = sign_in(client, db, claims, "schedule-private")
+        aid = client.get("/api/athletes").json()[0]["id"]
+        saved = client.put(f"/api/athletes/{aid}/state", headers={"X-CSRF-Token": csrf},
+                           json={"revision": 0, "events": [sample_item()], "available": []})
+        assert saved.status_code == 200, saved.text
+        assert client.get(f"/api/athletes/{aid}/state").json()["events"][0]["start"] == "15:00"
+        assert client.get("/api/account/export").json()["athletes"][0]["events"][0]["day"] == 2
+    with sqlite3.connect(db) as conn:
+        names = {row[1] for row in conn.execute("PRAGMA table_info(items)")}
+        assert "schedule_enc" in names
+        assert not {"day", "start", "end"} & names
+        assert conn.execute("SELECT schedule_enc FROM items LIMIT 1").fetchone()[0].startswith("enc:v1:")
+    assert b"15:00" not in db.read_bytes()
+
+
+def test_owned_database_schedule_migrates_transactionally(setup):
+    app, db, secret, claims = setup
+    with TestClient(app) as client:
+        csrf = sign_in(client, db, claims, "schedule-migration")
+        aid = client.get("/api/athletes").json()[0]["id"]
+        assert client.put(f"/api/athletes/{aid}/state", headers={"X-CSRF-Token": csrf},
+                          json={"revision": 0, "events": [sample_item()], "available": []}).status_code == 200
+    # Rebuild a copy of the old owned-DB schema to reproduce an existing installation.
+    with sqlite3.connect(db) as conn:
+        conn.executescript("""
+            ALTER TABLE items RENAME TO items_encrypted_old;
+            CREATE TABLE items (
+                athlete_id TEXT NOT NULL REFERENCES athletes(id) ON DELETE CASCADE,
+                collection TEXT NOT NULL CHECK(collection IN ('events','available')),
+                id TEXT NOT NULL, position INTEGER NOT NULL,
+                title_enc TEXT NOT NULL, school_enc TEXT NOT NULL,
+                location_enc TEXT NOT NULL, notes_enc TEXT NOT NULL,
+                type TEXT NOT NULL, day INTEGER NOT NULL, start TEXT NOT NULL, end TEXT NOT NULL,
+                source_id TEXT, catalog_id TEXT,
+                PRIMARY KEY (athlete_id, collection, id)
+            );
+            INSERT INTO items(athlete_id,collection,id,position,title_enc,school_enc,
+                             location_enc,notes_enc,type,day,start,end,source_id,catalog_id)
+                SELECT athlete_id,collection,id,position,title_enc,school_enc,
+                       location_enc,notes_enc,type,2,'15:00','16:00',source_id,catalog_id
+                FROM items_encrypted_old;
+            DROP TABLE items_encrypted_old;
+        """)
+    migrated = create_app(db, encryption_key=secret, client_id=CLIENT_ID, client_secret=SECRET,
+                          redirect_uri=LOCAL_URI, token_exchange=lambda *args: {"id_token":"verified-token"},
+                          token_verifier=lambda *args: claims.copy())
+    with TestClient(migrated) as client:
+        sign_in(client, db, claims, "schedule-migration")
+        state = client.get(f"/api/athletes/{aid}/state").json()
+        assert state["events"][0]["start"] == "15:00"
+        assert state["events"][0]["title"] == "Consulta particular 123"
+        assert state["revision"] == 1
+    with sqlite3.connect(db) as conn:
+        columns = {row[1] for row in conn.execute("PRAGMA table_info(items)")}
+        assert "schedule_enc" in columns and "start" not in columns
+        assert conn.execute("SELECT COUNT(*) FROM items").fetchone()[0] == 1
