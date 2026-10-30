@@ -5,6 +5,7 @@ The legacy unowned SQLite database is NEVER opened/migrated by this app.
 from __future__ import annotations
 
 from contextlib import contextmanager
+from typing import Any
 from datetime import datetime, timezone
 from hashlib import sha256
 from pathlib import Path
@@ -21,6 +22,7 @@ import time
 import uuid
 
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+from apps.agenda_atleta.admin_settings import ALL_DEFINITIONS, ensure_settings, fetch_settings, validate_value
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, RedirectResponse, Response
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -91,6 +93,12 @@ class PrivacyAcknowledgement(BaseModel):
     responsible_adult: bool
 
 
+class SettingUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    revision: int = Field(ge=0)
+    value: Any
+
+
 class AccountDeletionRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     confirmation: str
@@ -154,6 +162,22 @@ def create_app(db_path=None, *, encryption_key=None, client_id=None, client_secr
 
     def owner_key(sub):
         return hmac.new(key, b"google-sub:" + sub.encode(), sha256).hexdigest()
+
+    # Access is granted only by the trusted process environment, never by the settings DB.
+    raw_admin_ids = [x.strip().lower() for x in os.getenv("APP_ADMIN_OWNER_IDS", "").split(",") if x.strip()]
+    if any(not re.fullmatch(r"[a-f0-9]{64}", value) for value in raw_admin_ids):
+        raise RuntimeError("APP_ADMIN_OWNER_IDS exige IDs válidos de 64 caracteres hexadecimais")
+    admin_ids = frozenset(raw_admin_ids)
+
+    def is_admin(owner_id):
+        return owner_id in admin_ids
+
+    def current_notice_version():
+        with connection() as conn:
+            rows = dict(conn.execute(
+                "SELECT key,revision FROM app_settings WHERE key IN ('legal.privacy_notice','legal.terms_of_service')"
+            ).fetchall())
+        return f"{NOTICE_VERSION}-p{rows.get('legal.privacy_notice',0)}-t{rows.get('legal.terms_of_service',0)}"
 
     @contextmanager
     def connection():
@@ -269,6 +293,9 @@ def create_app(db_path=None, *, encryption_key=None, client_id=None, client_secr
                 raise
         elif {"day", "start", "end"} & cols:
             raise RuntimeError("Esquema híbrido pode expor horários; revisão manual necessária")
+    # Shared database for athletes, authentication, obligations and generic settings.
+    with connection() as conn:
+        ensure_settings(conn)
     if os.name == "posix":
         os.chmod(db, 0o600)
 
@@ -317,6 +344,11 @@ def create_app(db_path=None, *, encryption_key=None, client_id=None, client_secr
         if row is None:
             raise HTTPException(401, "Sessão expirada")
         return {"owner_id": row["owner_id"], "csrf": row["csrf"], "expires": row["expires"]}
+
+    def admin_guard(session=Depends(session_for)):
+        if not is_admin(session["owner_id"]):
+            raise HTTPException(403, "Acesso restrito ao administrador")
+        return session
 
     def csrf_guard(request: Request, session=Depends(session_for)):
         if not secrets.compare_digest(request.headers.get("X-CSRF-Token", ""), session["csrf"]):
@@ -462,7 +494,8 @@ def create_app(db_path=None, *, encryption_key=None, client_id=None, client_secr
 
     @app.get("/api/auth/me")
     def me(session=Depends(session_for)):
-        return {"authenticated": True, "csrfToken": session["csrf"]}
+        return {"authenticated": True, "csrfToken": session["csrf"],
+                "ownerId": session["owner_id"], "isAdmin": is_admin(session["owner_id"])}
 
     @app.post("/api/auth/logout")
     def logout(request: Request, session=Depends(csrf_guard)):
@@ -471,6 +504,67 @@ def create_app(db_path=None, *, encryption_key=None, client_id=None, client_secr
         response = Response(status_code=204)
         response.delete_cookie("ada_session", path="/")
         return response
+
+    @app.get("/admin", include_in_schema=False)
+    def administrator_page(session=Depends(admin_guard)):
+        return FileResponse(WEB_DIR / "admin.html", media_type="text/html; charset=utf-8")
+
+    @app.get("/static/admin.css", include_in_schema=False)
+    def administrator_styles(session=Depends(admin_guard)):
+        return FileResponse(WEB_DIR / "admin.css", media_type="text/css; charset=utf-8")
+
+    @app.get("/static/admin.js", include_in_schema=False)
+    def administrator_script(session=Depends(admin_guard)):
+        return FileResponse(WEB_DIR / "admin.js", media_type="text/javascript; charset=utf-8")
+
+    @app.get("/api/admin/settings")
+    def get_admin_settings(session=Depends(admin_guard)):
+        with connection() as conn:
+            items = fetch_settings(conn)
+            audit = [dict(row) for row in conn.execute(
+                "SELECT key,revision,actor_id,updated_at FROM app_settings_audit ORDER BY id DESC LIMIT 15"
+            ).fetchall()]
+        evidence = [x for x in items if x["kind"] == "obligation"]
+        return {"version":"2.0.0-rc.1", "settings":items, "recentChanges":audit,
+                "obligations":{"total":len(evidence),
+                  "recorded":sum(x["value"]["status"]=="evidence_recorded" for x in evidence),
+                  "inReview":sum(x["value"]["status"]=="in_review" for x in evidence)},
+                "commercialStatus":"NAO_LIBERADO",
+                "message":"Registro de evidências não é certificação jurídica nem autorização de deploy."}
+
+    @app.put("/api/admin/settings/{setting_key}")
+    def update_admin_setting(setting_key: str, data: SettingUpdate, session=Depends(csrf_guard)):
+        if not is_admin(session["owner_id"]):
+            raise HTTPException(403, "Acesso restrito ao administrador")
+        if setting_key not in ALL_DEFINITIONS:
+            raise HTTPException(404, "Parâmetro não encontrado")
+        try:
+            clean_value = validate_value(setting_key,data.value)
+        except ValueError as exc:
+            raise HTTPException(422,str(exc)) from None
+        now = int(time.time())
+        with connection() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            try:
+                row = conn.execute("SELECT revision FROM app_settings WHERE key=?", (setting_key,)).fetchone()
+                if row is None or row["revision"] != data.revision:
+                    raise HTTPException(409, "Parâmetro modificado em outra sessão. Recarregue.")
+                revision = data.revision + 1
+                conn.execute(
+                    """UPDATE app_settings SET value_json=?,revision=?,updated_by=?,updated_at=?
+                       WHERE key=? AND revision=?""",
+                    (json.dumps(clean_value,ensure_ascii=False),revision,
+                     session["owner_id"],now,setting_key,data.revision),
+                )
+                conn.execute(
+                    "INSERT INTO app_settings_audit(key,revision,actor_id,updated_at) VALUES(?,?,?,?)",
+                    (setting_key,revision,session["owner_id"],now),
+                )
+                conn.commit()
+            except Exception:
+                conn.rollback()
+                raise
+        return {"key":setting_key,"value":clean_value,"revision":revision,"updated_at":now}
 
     @app.get("/api/privacy")
     def privacy_notice(session=Depends(session_for)):
