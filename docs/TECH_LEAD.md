@@ -48,5 +48,11 @@ python -m factory.tech_lead --repo lukeazarado/ai-software-factory --pr 42
 
 A saída é um JSON em `workspace/reviews/` com o SHA do PR, parecer e veredito, **sem comentar nem aprovar o PR no GitHub**. O comando consome tokens da API e exige execução intencional; não é acionado automaticamente quando um PR é criado. Os diffs são lidos sem execução de código não confiável. Arquivos binários, diffs ausentes e PRs muito grandes exigem revisão manual. Como o parecer é por diff, o revisor pode necessitar de contexto adicional para validação completa.
 
+## Integração automática com GitHub Actions
+
+Todo PR direcionado à `main` aciona CI de testes com token somente leitura. Após a conclusão, o workflow confiável de Tech Lead faz uma verificação de elegibilidade por SHA/PR, publica um comentário com a conclusão do CI e, se houver opt-in explícito via secret `OPENAI_API_KEY` e variável `TECH_LEAD_AI_ENABLED=true`, chama o agente para revisar o diff sem executar código do PR. Na ausência de autorização de custos, o resultado é `NAO_VERIFICADO` após CI verde e a revisão humana continua necessária. CI vermelho resulta em `AJUSTES_OBRIGATORIOS`.
+
+Detalhes e configuração: [Automação de Pull Requests](PR_AUTOMATION.md). Isso **não** configura merge automático, aprovação formal no GitHub, deploy ou branch protection.
+
 ## Limites do MVP
-O pipeline `factory.runner` agora contém cinco agentes sequenciais e registra o parecer de Tech Lead no relatório local; esse runner **não cria PRs**. A revisão de um PR real acontece quando solicitada ao ChatGPT conectado ou ao executar `factory.tech_lead` com acesso à API. Não existe neste MVP webhook, GitHub App de revisão automática ou check obrigatório de branch protection.
+O pipeline `factory.runner` contém cinco agentes sequenciais e registra o parecer de Tech Lead no relatório local; esse runner **não cria PRs**. O GitHub Actions agora integra testes em PRs e relatório TL após CI, sem execução paga até opt-in. Não há branch protection obrigatória configurada, autorização de merge automático nem deploy automático.
