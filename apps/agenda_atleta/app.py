@@ -568,12 +568,23 @@ def create_app(db_path=None, *, encryption_key=None, client_id=None, client_secr
 
     @app.get("/api/privacy")
     def privacy_notice(session=Depends(session_for)):
+        with connection() as conn:
+            keys = ("brand.product_name","supplier.legal_name","brand.support_email",
+                    "legal.privacy_notice","legal.terms_of_service")
+            values = {row["key"]: json.loads(row["value_json"]) for row in conn.execute(
+                "SELECT key,value_json FROM app_settings WHERE key IN (?,?,?,?,?)", keys
+            )}
         return {
-            "version": NOTICE_VERSION, "status": "draft_pending_legal_review",
+            "version": current_notice_version(), "status": "draft_pending_legal_review",
             "audience": "Conta administrada por pessoa adulta; acesso direto por menores nao previsto.",
             "data_categories": ["identificador Google derivado", "nome do atleta",
                                 "escola, local, atividade, observacoes", "dia e horario"],
             "purpose": "Organizacao privada de atividades de atletas pelo responsavel da conta.",
+            "product_name": values.get("brand.product_name","Agenda do Atleta Pro"),
+            "supplier": values.get("supplier.legal_name",""),
+            "support_email": values.get("brand.support_email",""),
+            "privacy_notice": values.get("legal.privacy_notice",""),
+            "terms_of_service": values.get("legal.terms_of_service",""),
             "third_party_login": "Google OAuth para autenticacao; o email nao e armazenado.",
             "export": "/api/account/export", "deletion": "/api/account",
             "warning": "Aviso informativo de homologacao: nao substitui politica de privacidade juridicamente aprovada.",
@@ -586,7 +597,10 @@ def create_app(db_path=None, *, encryption_key=None, client_id=None, client_secr
                 "SELECT notice_version,acknowledged_at,adult_statement FROM privacy_ack WHERE owner_id=?",
                 (session["owner_id"],),
             ).fetchone()
-        return {"acknowledged": row is not None, "notice_version": row["notice_version"] if row else None,
+        current_version = current_notice_version()
+        return {"acknowledged": row is not None and row["notice_version"] == current_version,
+                "notice_version": row["notice_version"] if row else None,
+                "current_version": current_version,
                 "adult_statement": bool(row["adult_statement"]) if row else False}
 
     @app.post("/api/privacy/ack")
@@ -599,9 +613,9 @@ def create_app(db_path=None, *, encryption_key=None, client_id=None, client_secr
                    VALUES (?,?,?,1) ON CONFLICT(owner_id)
                    DO UPDATE SET notice_version=excluded.notice_version,
                                  acknowledged_at=excluded.acknowledged_at,adult_statement=1""",
-                (session["owner_id"], NOTICE_VERSION, int(time.time())),
+                (session["owner_id"], current_notice_version(), int(time.time())),
             )
-        return {"acknowledged": True, "notice_version": NOTICE_VERSION,
+        return {"acknowledged": True, "notice_version": current_notice_version(),
                 "note": "Autodeclaracao registrada; nao comprova tutela nem consentimento juridico."}
 
     @app.get("/api/account/export")
