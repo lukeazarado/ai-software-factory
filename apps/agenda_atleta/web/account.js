@@ -42,6 +42,7 @@ $("delete").addEventListener("click", async () => {
   if (!window.confirm("Excluir sua conta e TODOS os atletas deste usuário?")) return;
   try {
     const r = await fetch("/api/account", {method:"DELETE",credentials:"same-origin",headers:{"Content-Type":"application/json","X-CSRF-Token":csrf},body:JSON.stringify({confirmation})});
+    if (r.status === 403) throw new Error("Faça logout, entre novamente com Google e tente novamente.");
     if (!r.ok) throw new Error("HTTP " + r.status);
     window.location.assign("/login");
   } catch(e) { message("Falha ao excluir conta: " + e.message); }
