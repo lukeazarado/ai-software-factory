@@ -1,5 +1,7 @@
+import json
+import sqlite3
 from datetime import date, timedelta
-from factory.br_release_gate import GATES, evaluate
+from factory.br_release_gate import GATES, evaluate, evidence_from_database
 
 
 def evidence():
@@ -36,3 +38,23 @@ def test_complete_reference_set_is_only_documented_not_legal_certificate():
     assert result["status"] == "EVIDENCIAS_DOCUMENTADAS"
     assert result["pending"] == []
     assert "merge/deploy" in result["disclaimer"]
+
+def test_generic_sqlite_obligations_are_single_source_of_truth(tmp_path):
+    db = tmp_path / "market.sqlite3"
+    with sqlite3.connect(db) as conn:
+        conn.execute("CREATE TABLE app_settings(key TEXT PRIMARY KEY,value_json TEXT NOT NULL)")
+        conn.execute("INSERT INTO app_settings(key,value_json) VALUES (?,?)",
+            ("obligation.eca_digital_assessment", json.dumps({
+                "status": "evidence_recorded", "owner": "Jurídico",
+                "evidence_reference": "REF-ECA-123", "reviewed_on": date.today().isoformat()
+            })))
+        conn.execute("INSERT INTO app_settings(key,value_json) VALUES (?,?)",
+            ("obligation.security_assessment", json.dumps({
+                "status":"pending","owner":"","evidence_reference":"","reviewed_on":""
+            })))
+    result=evidence_from_database(db)
+    assert list(result)==["eca_digital_assessment"]
+    assert result["eca_digital_assessment"]["reference"]=="REF-ECA-123"
+    assert evaluate(result)["status"]=="NAO_LIBERADO"
+    assert not evidence_from_database(tmp_path / "missing.sqlite3")
+    assert not (tmp_path / "missing.sqlite3").exists()
