@@ -56,4 +56,4 @@ Os testes unitários usam simulações do SDK e API GitHub; não cobram tokens. 
 - As ferramentas do agente de geração restringem o workspace; o revisor de PR é somente leitura.
 - Diffs e descrições de PR são conteúdo **não confiável**: devem ser tratados como evidência, não instruções.
 - A inspeção estática do MVP não substitui testes funcionais/E2E, revisão de segurança aprofundada nem autorização humana.
-- Para revisão automática em cada PR no futuro, serão necessários um ambiente runner confiável, segredos protegidos, limites de custo e configurações explícitas do GitHub Actions/App.
+- O CI da Agenda é executado **automaticamente em PRs** para `main`; ao concluir, o workflow **Tech Lead - revisar PR apos QA** identifica o PR e publica um parecer consultivo. Por padrão, esse parecer é `NAO_VERIFICADO` quando o CI passou, pois a análise por IA fica desabilitada até opt-in explícito. Consulte [Automação de PRs](docs/PR_AUTOMATION.md) para habilitar a análise de diff via IA (requer segredo, orçamento e pode gerar custos). Nenhum workflow aprova ou faz merge automaticamente.
