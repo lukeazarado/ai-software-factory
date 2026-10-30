@@ -392,7 +392,7 @@ def test_schedule_is_ciphertext_and_roundtrips(setup):
     assert b"15:00" not in db.read_bytes()
 
 
-def test_owned_database_schedule_migrates_transactionally(setup):
+def test_owned_database_schedule_migrates_transactionally(setup, monkeypatch):
     app, db, secret, claims = setup
     with TestClient(app) as client:
         csrf = sign_in(client, db, claims, "schedule-migration")
@@ -420,6 +420,10 @@ def test_owned_database_schedule_migrates_transactionally(setup):
                 FROM items_encrypted_old;
             DROP TABLE items_encrypted_old;
         """)
+    with pytest.raises(RuntimeError, match="APP_ALLOW_SCHEDULE_MIGRATION"):
+        create_app(db, encryption_key=secret, client_id=CLIENT_ID, client_secret=SECRET,
+                   redirect_uri=LOCAL_URI)
+    monkeypatch.setenv("APP_ALLOW_SCHEDULE_MIGRATION", "1")
     migrated = create_app(db, encryption_key=secret, client_id=CLIENT_ID, client_secret=SECRET,
                           redirect_uri=LOCAL_URI, token_exchange=lambda *args: {"id_token":"verified-token"},
                           token_verifier=lambda *args: claims.copy())
