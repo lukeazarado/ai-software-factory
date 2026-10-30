@@ -301,6 +301,18 @@ def create_app(db_path=None, *, encryption_key=None, client_id=None, client_secr
     def app_javascript(session=Depends(session_for)):
         return FileResponse(WEB_DIR / "app.js", media_type="text/javascript; charset=utf-8")
 
+    @app.get("/account", include_in_schema=False)
+    def account_page(session=Depends(session_for)):
+        return FileResponse(WEB_DIR / "account.html", media_type="text/html; charset=utf-8")
+
+    @app.get("/static/account.js", include_in_schema=False)
+    def account_javascript(session=Depends(session_for)):
+        return FileResponse(WEB_DIR / "account.js", media_type="text/javascript; charset=utf-8")
+
+    @app.get("/static/account.css", include_in_schema=False)
+    def account_styles(session=Depends(session_for)):
+        return FileResponse(WEB_DIR / "account.css", media_type="text/css; charset=utf-8")
+
     @app.get("/auth/google/start")
     def login_start(request: Request):
         # Bound OAuth flow creation at the authoritative socket peer, never X-Forwarded-For.
