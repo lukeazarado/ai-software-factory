@@ -8,6 +8,7 @@ from __future__ import annotations
 import argparse
 from datetime import date
 import json
+import sqlite3
 from pathlib import Path
 
 GATES = {
@@ -50,13 +51,43 @@ def evaluate(evidence: dict | None) -> dict:
             "disclaimer": "Checklist não comprova adequação jurídica nem autoriza merge/deploy."}
 
 
+def evidence_from_database(db_path: Path) -> dict:
+    """Read only generic obligation settings from the existing application DB.
+
+    This never makes a database, updates values, reads athlete data or decrypts fields.
+    """
+    if not db_path.is_file():
+        return {}
+    result = {}
+    with sqlite3.connect(f"file:{db_path.resolve().as_posix()}?mode=ro", uri=True) as conn:
+        try:
+            records = conn.execute("SELECT key,value_json FROM app_settings WHERE key LIKE 'obligation.%'").fetchall()
+        except sqlite3.OperationalError:
+            return {}
+        for key, value_json in records:
+            code = key.removeprefix("obligation.")
+            if code not in GATES:
+                continue
+            try:
+                item = json.loads(value_json)
+            except (ValueError,TypeError):
+                continue
+            if not isinstance(item,dict) or item.get("status") != "evidence_recorded":
+                continue
+            result[code] = {"approved_by":item.get("owner",""),
+                            "reference":item.get("evidence_reference",""),
+                            "approved_on":item.get("reviewed_on","")}
+    return result
+
+
 def main():
     parser = argparse.ArgumentParser(description="Gate conservador de prontidão comercial BR")
-    parser.add_argument("--evidence", type=Path, help="JSON de referências de aprovações, fora do repositório")
+    parser.add_argument("--evidence", type=Path, help="JSON de evidências (modo legado)")
+    parser.add_argument("--db", type=Path, default=Path("data/agenda_atleta_secure.sqlite3"),
+                        help="SQLite único contendo app_settings/obrigações")
     args = parser.parse_args()
-    entries = None
-    if args.evidence:
-        entries = json.loads(args.evidence.read_text(encoding="utf-8"))
+    entries = (json.loads(args.evidence.read_text(encoding="utf-8"))
+               if args.evidence else evidence_from_database(args.db))
     report = evaluate(entries)
     print(json.dumps(report, ensure_ascii=False, indent=2))
     raise SystemExit(0 if report["status"] == "EVIDENCIAS_DOCUMENTADAS" else 2)
