@@ -81,6 +81,11 @@ class State(BaseModel):
         return self
 
 
+class AccountDeletionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    confirmation: str
+
+
 class AthleteName(BaseModel):
     model_config = ConfigDict(extra="forbid")
     name: str = Field(min_length=1, max_length=80)
