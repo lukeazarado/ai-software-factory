@@ -1,0 +1,40 @@
+name: Tech Lead - revisar PR apos QA
+
+on:
+  workflow_run:
+    workflows: ["Testar Agenda do Atleta (CI e manual)"]
+    types: [completed]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  tech-lead:
+    if: ${{ github.event.workflow_run.event == 'pull_request' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      # Trusted default-branch code ONLY. Never checkout the PR's head or consume
+      # artifacts/caches produced by its untrusted QA workflow.
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+      - name: Instalar dependencias da revisao opt-in
+        if: ${{ vars.TECH_LEAD_AI_ENABLED == 'true' }}
+        run: python -m pip install -r requirements.txt
+      - name: Publicar parecer consultivo no PR
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          OPENAI_API_KEY: ${{ vars.TECH_LEAD_AI_ENABLED == 'true' && secrets.OPENAI_API_KEY || '' }}
+          TECH_LEAD_AI_ENABLED: ${{ vars.TECH_LEAD_AI_ENABLED || 'false' }}
+          OPENAI_MODEL: ${{ vars.TECH_LEAD_MODEL || 'gpt-4.1-mini' }}
+        run: |
+          python -m factory.auto_pr_review \
+            --event "$GITHUB_EVENT_PATH" \
+            --repo "$GITHUB_REPOSITORY" \
+            --output workspace/reviews
