@@ -23,7 +23,7 @@
 | Google `sub` do adulto | Identificar proprietário | HMAC irreversível com chave da instância | Vínculo de identidade persistente |
 | Nome do atleta | Identificar agenda | AES-256-GCM | Crianças/adolescentes |
 | Atividades, escolas, locais, notas | Planejar rotina | AES-256-GCM | Informação pessoal e inferências |
-| Dia/horários e tipo | Construir calendário | Exige avaliação e proteção no ciclo 4 | Revela presença em local |
+| Dia e horários | Construir calendário | AES-256-GCM em `schedule_enc`, com migração opt-in | Revela presença em local se houver vazamento de backups antigos |\n| Tipo e IDs técnicos | Operação/calendário | Legível; autorização por proprietário | Inferência de rotinas e correlação |
 | Sessão, CSRF e login | Acesso seguro | Cookies HttpOnly / hashes / CSRF | Roubo de sessão |
 | Exportação JSON | Portabilidade | Entregue ao dono autenticado; **não cifrado** | Requer guarda cuidadosa |
 
