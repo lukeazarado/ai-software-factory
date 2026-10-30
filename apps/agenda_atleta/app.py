@@ -523,8 +523,7 @@ def create_app(db_path=None, *, encryption_key=None, client_id=None, client_secr
                     "SELECT * FROM items WHERE athlete_id=? ORDER BY collection,position", (aid,)
                 ):
                     aad = lambda field: f"items:{aid}:{row['collection']}:{row['id']}:{field}"
-                    item = {"id": row["id"], "type": row["type"], "day": row["day"],
-                            "start": row["start"], "end": row["end"],
+                    item = {"id": row["id"], "type": row["type"], **json.loads(decrypted(row["schedule_enc"], aad("schedule"))),
                             "title": decrypted(row["title_enc"], aad("title")),
                             "school": decrypted(row["school_enc"], aad("school")),
                             "location": decrypted(row["location_enc"], aad("location")),
@@ -604,8 +603,7 @@ def create_app(db_path=None, *, encryption_key=None, client_id=None, client_secr
             result = {"revision": athlete["revision"], "events": [], "available": []}
             for row in conn.execute("SELECT * FROM items WHERE athlete_id=? ORDER BY collection,position", (aid,)):
                 aad = lambda field: f"items:{aid}:{row['collection']}:{row['id']}:{field}"
-                item = {"id": row["id"], "type": row["type"], "day": row["day"],
-                        "start": row["start"], "end": row["end"],
+                item = {"id": row["id"], "type": row["type"], **json.loads(decrypted(row["schedule_enc"], aad("schedule"))),
                         "title": decrypted(row["title_enc"], aad("title")),
                         "school": decrypted(row["school_enc"], aad("school")),
                         "location": decrypted(row["location_enc"], aad("location")),
@@ -630,12 +628,14 @@ def create_app(db_path=None, *, encryption_key=None, client_id=None, client_secr
                     for index, item in enumerate(getattr(data, collection)):
                         aad = lambda field: f"items:{aid}:{collection}:{item.id}:{field}"
                         conn.execute("""INSERT INTO items(athlete_id,collection,id,position,title_enc,school_enc,
-                            location_enc,notes_enc,type,day,start,end,source_id,catalog_id)
-                            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""", (
+                            location_enc,notes_enc,type,schedule_enc,source_id,catalog_id)
+                            VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""", (
                             aid, collection, item.id, index, encrypted(item.title, aad("title")),
                             encrypted(item.school, aad("school")), encrypted(item.location, aad("location")),
-                            encrypted(item.notes, aad("notes")), item.type, item.day, item.start,
-                            item.end, item.sourceId, item.catalogId,
+                            encrypted(item.notes, aad("notes")), item.type,
+                            encrypted(json.dumps({"day":item.day,"start":item.start,"end":item.end},
+                                                 separators=(",",":")), aad("schedule")),
+                            item.sourceId, item.catalogId,
                         ))
                 revision = athlete["revision"] + 1
                 conn.execute("UPDATE athletes SET revision=? WHERE id=? AND owner_id=?", (revision, aid, session["owner_id"]))
