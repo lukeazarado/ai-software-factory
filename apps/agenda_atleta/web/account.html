@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="pt-BR">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Minha conta e privacidade — Agenda do Atleta</title><link rel="stylesheet" href="/static/account.css"></head>
+<body><main class="panel">
+<a href="/">← Voltar à Agenda</a>
+<h1>Minha conta e privacidade</h1>
+<p class="warning">Esta versão está em homologação. O aviso abaixo ainda precisa de revisão jurídica antes de uso comercial com dados reais de menores.</p>
+<section><h2>Informações sobre os dados</h2><p id="notice">Carregando...</p><p id="noticeStatus"></p></section>
+<section><h2>Declaração do responsável pela conta</h2>
+<p>O login Google não verifica idade, parentesco nem guarda legal. A declaração abaixo não substitui comprovação ou base legal válida para dados de crianças.</p>
+<label><input id="readNotice" type="checkbox"> Li o aviso de privacidade desta versão.</label>
+<label><input id="adult" type="checkbox"> Declaro ser adulto responsável pela administração desta conta e dos dados cadastrados.</label>
+<button id="accept">Registrar declaração</button></section>
+<section><h2>Acesso e portabilidade</h2><p>A exportação inclui informações dos seus atletas em JSON <strong>sem criptografia</strong>. Guarde o arquivo de forma segura.</p>
+<button id="export">Exportar todos os meus dados</button></section>
+<section><h2>Excluir minha conta</h2>
+<p class="warning">A exclusão remove seus atletas, atividades e sessões do banco ativo. Backups externos não são automaticamente removidos. Esta ação é irreversível.</p>
+<label for="confirmation">Para confirmar, digite <code>EXCLUIR_MINHA_CONTA_E_ATLETAS</code></label>
+<input id="confirmation" autocomplete="off" spellcheck="false">
+<button id="delete" class="danger">Excluir definitivamente minha conta</button></section>
+<p id="message" role="status" aria-live="polite"></p>
+</main><script src="/static/account.js" defer></script></body></html>
