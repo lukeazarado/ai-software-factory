@@ -401,6 +401,58 @@ def create_app(db_path=None, *, encryption_key=None, client_id=None, client_secr
         response.delete_cookie("ada_session", path="/")
         return response
 
+    @app.get("/api/account/export")
+    def export_account(session=Depends(session_for)):
+        """Return only the logged-in owner's account data, decrypted for download."""
+        owner = session["owner_id"]
+        result = []
+        with connection() as conn:
+            athletes = conn.execute(
+                "SELECT id,name_enc,revision FROM athletes WHERE owner_id=? ORDER BY id", (owner,)
+            ).fetchall()
+            for athlete in athletes:
+                aid = athlete["id"]
+                data = {"id": aid, "name": decrypted(athlete["name_enc"], f"athletes:{aid}:name"),
+                        "revision": athlete["revision"], "events": [], "available": []}
+                for row in conn.execute(
+                    "SELECT * FROM items WHERE athlete_id=? ORDER BY collection,position", (aid,)
+                ):
+                    aad = lambda field: f"items:{aid}:{row['collection']}:{row['id']}:{field}"
+                    item = {"id": row["id"], "type": row["type"], "day": row["day"],
+                            "start": row["start"], "end": row["end"],
+                            "title": decrypted(row["title_enc"], aad("title")),
+                            "school": decrypted(row["school_enc"], aad("school")),
+                            "location": decrypted(row["location_enc"], aad("location")),
+                            "notes": decrypted(row["notes_enc"], aad("notes"))}
+                    if row["source_id"]:
+                        item["sourceId"] = row["source_id"]
+                    if row["catalog_id"]:
+                        item["catalogId"] = row["catalog_id"]
+                    data[row["collection"]].append(item)
+                result.append(data)
+        return {"app": "Agenda do Atleta", "format": "account-export-v1", "athletes": result}
+
+    @app.delete("/api/account")
+    def delete_account(data: AccountDeletionRequest, session=Depends(csrf_guard)):
+        """Remove current account and its athletes; backups remain independently managed."""
+        if data.confirmation != "EXCLUIR_MINHA_CONTA_E_ATLETAS":
+            raise HTTPException(400, "Confirmação de exclusão inválida")
+        owner = session["owner_id"]
+        with connection() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            try:
+                conn.execute("DELETE FROM items WHERE athlete_id IN (SELECT id FROM athletes WHERE owner_id=?)", (owner,))
+                conn.execute("DELETE FROM athletes WHERE owner_id=?", (owner,))
+                conn.execute("DELETE FROM sessions WHERE owner_id=?", (owner,))
+                conn.execute("DELETE FROM users WHERE id=?", (owner,))
+                conn.commit()
+            except Exception:
+                conn.rollback()
+                raise
+        response = Response(status_code=204)
+        response.delete_cookie("ada_session", path="/")
+        return response
+
     @app.get("/api/athletes")
     def list_athletes(session=Depends(session_for)):
         owner = session["owner_id"]
