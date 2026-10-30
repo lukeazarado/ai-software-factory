@@ -437,3 +437,19 @@ def test_owned_database_schedule_migrates_transactionally(setup, monkeypatch):
         columns = {row[1] for row in conn.execute("PRAGMA table_info(items)")}
         assert "schedule_enc" in columns and "start" not in columns
         assert conn.execute("SELECT COUNT(*) FROM items").fetchone()[0] == 1
+
+def test_irreversible_account_erasure_requires_recent_google_session(setup):
+    app, db, _, claims = setup
+    with TestClient(app) as client:
+        csrf = sign_in(client, db, claims, "erase-old-session")
+        with sqlite3.connect(db) as conn:
+            conn.execute("UPDATE sessions SET expires=expires-3600")
+        response = client.request(
+            "DELETE", "/api/account", headers={"X-CSRF-Token": csrf},
+            json={"confirmation": "EXCLUIR_MINHA_CONTA_E_ATLETAS"},
+        )
+        assert response.status_code == 403
+        assert "login novamente" in response.text
+        assert client.get("/api/athletes").status_code == 200
+        with sqlite3.connect(db) as conn:
+            assert conn.execute("SELECT COUNT(*) FROM users").fetchone()[0] == 1
