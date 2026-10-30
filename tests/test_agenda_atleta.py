@@ -282,3 +282,52 @@ def test_source_and_catalog_id_saved_after_restart(setup):
     with TestClient(app2) as c2:
         sign_in(c2, db, claims, "catalog-user")
         assert c2.get(f"/api/athletes/{aid}/state").json()["events"] == [event]
+def test_owner_export_contains_only_own_athletes(setup):
+    app, db, _, claims = setup
+    with TestClient(app) as alice:
+        csrf = sign_in(alice, db, claims, "export-alice")
+        aid = alice.get("/api/athletes").json()[0]["id"]
+        saved = alice.put(
+            f"/api/athletes/{aid}/state", headers={"X-CSRF-Token": csrf},
+            json={"revision": 0, "events": [sample_item()], "available": []},
+        )
+        assert saved.status_code == 200, saved.text
+        with TestClient(app) as bob:
+            sign_in(bob, db, claims, "export-bob")
+            response = bob.get("/api/account/export")
+            assert response.status_code == 200
+            assert aid not in response.text
+            assert "Consulta particular 123" not in response.text
+        exported = alice.get("/api/account/export")
+        assert exported.status_code == 200
+        assert exported.headers["cache-control"] == "no-store"
+        payload = exported.json()
+        assert payload["format"] == "account-export-v1"
+        assert payload["athletes"][0]["events"][0]["title"] == "Consulta particular 123"
+        assert payload["athletes"][0]["id"] == aid
+        assert "google-person-1" not in exported.text
+
+
+def test_account_deletion_requires_csrf_and_exact_confirmation(setup):
+    app, db, _, claims = setup
+    with TestClient(app) as alice:
+        csrf = sign_in(alice, db, claims, "remove-alice")
+        aid = alice.get("/api/athletes").json()[0]["id"]
+        with TestClient(app) as bob:
+            sign_in(bob, db, claims, "remove-bob")
+            bob_id = bob.get("/api/athletes").json()[0]["id"]
+            invalid = alice.request("DELETE", "/api/account", json={"confirmation": "EXCLUIR_MINHA_CONTA_E_ATLETAS"})
+            assert invalid.status_code == 403
+            invalid = alice.request("DELETE", "/api/account", headers={"X-CSRF-Token": csrf},
+                                    json={"confirmation": "sim"})
+            assert invalid.status_code == 400
+            assert alice.get("/api/athletes").status_code == 200
+            done = alice.request("DELETE", "/api/account", headers={"X-CSRF-Token": csrf},
+                                 json={"confirmation": "EXCLUIR_MINHA_CONTA_E_ATLETAS"})
+            assert done.status_code == 204
+            assert alice.get("/api/account/export").status_code == 401
+            assert bob.get("/api/athletes").json()[0]["id"] == bob_id
+            assert bob.get(f"/api/athletes/{aid}/state").status_code == 404
+            with sqlite3.connect(db) as conn:
+                assert conn.execute("SELECT COUNT(*) FROM users").fetchone()[0] == 1
+                assert conn.execute("SELECT COUNT(*) FROM athletes").fetchone()[0] == 1
