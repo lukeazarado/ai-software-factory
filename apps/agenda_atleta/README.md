@@ -106,3 +106,16 @@ Os testes automatizados simulam a resposta autenticada do provedor Google sem fa
 4. Em HTTPS de homologação, conferir `Secure`, `HttpOnly`, `SameSite` e CSP pelo DevTools; conferir console sem violação CSP e interface responsiva.
 5. Exercitar importação/exportação JSON, catálogos, arrastar e soltar, conflitos, gráficos e backup/restauração usando exclusivamente dados fictícios.
 6. Revisão Tech Lead e aprovação humana **separadas** antes de qualquer deploy público.
+
+## Solução de problemas: 401 no callback do Google
+
+Se o navegador mostrar `{"detail":"Falha ao verificar identidade Google"}` após o consentimento Google, confirme que o transporte de verificação está instalado:
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install -r apps/agenda_atleta/requirements.txt
+.\.venv\Scripts\python.exe -c "from google.auth.transport.requests import Request; print('Transporte Google OK')"
+```
+
+Reinicie o processo Uvicorn e **inicie um login novo pela página /login** (o código de autorização e o state são descartáveis e de uso único). O servidor agora registra uma categoria de falha, sem tokens, no formato `Google OAuth callback failed: stage=<etapa> exception=<tipo>`. `token_exchange` indica falha de troca com o Google (verifique Client ID/Secret, redirect URI e rede); `id_token_verification` indica falha ao verificar o token (verifique dependência `requests`, data/hora do Windows e conexão HTTPS de saída). Não altere a chave de criptografia nem remova o SQLite para corrigir erros OAuth.
+
+**Privacidade dos logs:** o log de acesso padrão do Uvicorn inclui a URL completa do callback, com o parâmetro temporário `code`. Para não gravá-lo em logs locais, inicie o servidor com `--no-access-log`. Não cole URLs completas de callback, tokens, Client Secret ou a chave criptográfica em issues, PRs ou chats; para diagnóstico, compartilhe apenas o status HTTP e a categoria de erro.
