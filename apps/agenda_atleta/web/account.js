@@ -9,9 +9,15 @@ async function getJson(url, opts) {
 }
 async function init() {
   try {
-    csrf = (await getJson("/api/auth/me")).csrfToken;
+    const auth = await getJson("/api/auth/me");
+    csrf = auth.csrfToken;
+    $("accountId").textContent = auth.ownerId || "Indisponível";
+    if(auth.isAdmin) $("adminSettingsLink").hidden=false;
     const notice = await getJson("/api/privacy");
     $("notice").textContent = notice.purpose + " Dados: " + notice.data_categories.join(", ") + ". Login Google; sem compartilhamento público.";
+    $("supplierName").textContent = "Fornecedor: " + (notice.supplier || "Não informado — pendente de configuração");
+    $("privacyCopy").textContent = notice.privacy_notice || "Política de privacidade ainda não fornecida pelo responsável.";
+    $("termsCopy").textContent = notice.terms_of_service || "Termos de uso ainda não fornecidos pelo responsável.";
     const ack = await getJson("/api/privacy/ack");
     $("noticeStatus").textContent = ack.acknowledged ? "Declaração registrada na versão " + ack.notice_version : "Declaração ainda não registrada.";
   } catch(e) { message("Não foi possível carregar a conta. Faça login novamente."); }
