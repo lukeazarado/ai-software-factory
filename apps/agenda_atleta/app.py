@@ -313,10 +313,10 @@ def create_app(db_path=None, *, encryption_key=None, client_id=None, client_secr
             raise HTTPException(401, "Faça login com sua conta Google")
         hashed = sha256(token.encode()).hexdigest()
         with connection() as conn:
-            row = conn.execute("SELECT owner_id, csrf FROM sessions WHERE token_hash=? AND expires>?", (hashed, int(time.time()))).fetchone()
+            row = conn.execute("SELECT owner_id, csrf, expires FROM sessions WHERE token_hash=? AND expires>?", (hashed, int(time.time()))).fetchone()
         if row is None:
             raise HTTPException(401, "Sessão expirada")
-        return {"owner_id": row["owner_id"], "csrf": row["csrf"]}
+        return {"owner_id": row["owner_id"], "csrf": row["csrf"], "expires": row["expires"]}
 
     def csrf_guard(request: Request, session=Depends(session_for)):
         if not secrets.compare_digest(request.headers.get("X-CSRF-Token", ""), session["csrf"]):
@@ -543,6 +543,9 @@ def create_app(db_path=None, *, encryption_key=None, client_id=None, client_secr
     @app.delete("/api/account")
     def delete_account(data: AccountDeletionRequest, session=Depends(csrf_guard)):
         """Remove current account and its athletes; backups remain independently managed."""
+        # Account erasure is high impact; require login within the last 5 minutes.
+        if int(time.time()) > session["expires"] - SESSION_TTL + 5 * 60:
+            raise HTTPException(403, "Faça login novamente antes de excluir a conta")
         if data.confirmation != "EXCLUIR_MINHA_CONTA_E_ATLETAS":
             raise HTTPException(400, "Confirmação de exclusão inválida")
         owner = session["owner_id"]
