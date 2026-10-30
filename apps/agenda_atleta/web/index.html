@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Agenda do Atleta Pro v1.6.1 | Planejamento esportivo</title>
+<title>Agenda do Atleta Pro v2.0.0-rc.1 | Planejamento esportivo</title>
 <meta name="theme-color" content="#101b33">
 <meta name="description" content="Planejamento semanal de treinos e jogos, biblioteca de horários, análises e backup JSON.">
 <link rel="stylesheet" href="/static/app.css">
@@ -12,7 +12,7 @@
 <body>
 <div id="mobileScrim" class="mobile-scrim" aria-hidden="true"></div>
 <aside id="appSidebar" class="app-sidebar" aria-label="Menu principal">
- <div class="side-brand"><div class="brand-mark"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M8 3v4M16 3v4M3 10h18m-12 5 2 2 4-4"/></svg></div><div class="brand-copy"><strong>Agenda<span>Atleta</span></strong><small>SPORTS PLANNER PRO</small></div><button id="closeNav" class="side-close" aria-label="Fechar menu">×</button> </div>
+ <div class="side-brand"><div class="brand-mark"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M8 3v4M16 3v4M3 10h18m-12 5 2 2 4-4"/></svg></div><div class="brand-copy"><strong>Agenda<span>Atleta</span></strong><small>SPORTS PLANNER PRO · v2.0.0-rc.1</small></div><button id="closeNav" class="side-close" aria-label="Fechar menu">×</button> </div>
  <button id="collapseNav" type="button" class="sidebar-collapse-control" aria-label="Recolher menu lateral" aria-controls="appSidebar" aria-expanded="true" title="Recolher menu lateral">
   <svg class="collapse-control-icon" aria-hidden="true" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m14 18-6-6 6-6"/></svg>
  </button>
@@ -28,7 +28,7 @@
 </aside>
 <header class="app-topbar">
  <div class="topbar-left"><button id="openNav" class="menu-toggle" aria-label="Abrir menu" aria-expanded="false">☰</button><span class="topbar-breadcrumb">Workspace <span>/</span> Planejamento semanal</span><div class="athlete-switcher" aria-label="Selecionar atleta"><label class="sr-only" for="athleteSelect">Atleta</label><select id="athleteSelect" class="field" aria-label="Atleta ativo"></select><button type="button" id="addAthlete" class="btn btn-outline" title="Cadastrar atleta" aria-label="Cadastrar atleta">＋</button><button type="button" id="renameAthlete" class="btn btn-outline" title="Renomear atleta" aria-label="Renomear atleta">✎</button><button type="button" id="deleteAthlete" class="btn btn-outline" title="Excluir atleta" aria-label="Excluir atleta">×</button></div></div>
- <div class="topbar-actions"><span class="save-status"><span></span> Salvo no banco seguro</span><button id="logoutBtn" type="button" class="btn btn-outline" aria-label="Sair da conta Google">Sair</button><button id="importBtn" type="button" class="btn btn-outline"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 16V3m0 0-5 5m5-5 5 5M4 15v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"/></svg><span>Importar JSON</span></button><button id="exportBtn" type="button" class="btn btn-outline"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v13m0 0-5-5m5 5 5-5M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg><span>Exportar</span></button></div>
+ <div class="topbar-actions"><span class="save-status"><span></span> Salvo no banco seguro</span><a href="/account" class="btn btn-outline" title="Minha conta e privacidade" aria-label="Minha conta e privacidade">Privacidade</a><button id="logoutBtn" type="button" class="btn btn-outline" aria-label="Sair da conta Google">Sair</button><button id="importBtn" type="button" class="btn btn-outline"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 16V3m0 0-5 5m5-5 5 5M4 15v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"/></svg><span>Importar JSON</span></button><button id="exportBtn" type="button" class="btn btn-outline"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v13m0 0-5-5m5 5 5-5M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg><span>Exportar</span></button></div>
 </header>
 <main class="max-w-7xl mx-auto px-4 sm:px-6 py-6">
   <section class="dashboard-hero" aria-label="Introdução ao planejamento">

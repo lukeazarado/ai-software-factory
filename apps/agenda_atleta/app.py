@@ -5,12 +5,14 @@ The legacy unowned SQLite database is NEVER opened/migrated by this app.
 from __future__ import annotations
 
 from contextlib import contextmanager
+from typing import Any
 from datetime import datetime, timezone
 from hashlib import sha256
 from pathlib import Path
 from urllib.parse import urlencode, urlparse
 import base64
 import hmac
+import json
 import logging
 import os
 import re
@@ -20,6 +22,7 @@ import time
 import uuid
 
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+from apps.agenda_atleta.admin_settings import ALL_DEFINITIONS, ensure_settings, fetch_settings, validate_value
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, RedirectResponse, Response
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -81,6 +84,26 @@ class State(BaseModel):
         return self
 
 
+NOTICE_VERSION = "2026-10-30-draft-1"
+
+
+class PrivacyAcknowledgement(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    read_notice: bool
+    responsible_adult: bool
+
+
+class SettingUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    revision: int = Field(ge=0)
+    value: Any
+
+
+class AccountDeletionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    confirmation: str
+
+
 class AthleteName(BaseModel):
     model_config = ConfigDict(extra="forbid")
     name: str = Field(min_length=1, max_length=80)
@@ -140,6 +163,22 @@ def create_app(db_path=None, *, encryption_key=None, client_id=None, client_secr
     def owner_key(sub):
         return hmac.new(key, b"google-sub:" + sub.encode(), sha256).hexdigest()
 
+    # Access is granted only by the trusted process environment, never by the settings DB.
+    raw_admin_ids = [x.strip().lower() for x in os.getenv("APP_ADMIN_OWNER_IDS", "").split(",") if x.strip()]
+    if any(not re.fullmatch(r"[a-f0-9]{64}", value) for value in raw_admin_ids):
+        raise RuntimeError("APP_ADMIN_OWNER_IDS exige IDs válidos de 64 caracteres hexadecimais")
+    admin_ids = frozenset(raw_admin_ids)
+
+    def is_admin(owner_id):
+        return owner_id in admin_ids
+
+    def current_notice_version():
+        with connection() as conn:
+            rows = dict(conn.execute(
+                "SELECT key,revision FROM app_settings WHERE key IN ('legal.privacy_notice','legal.terms_of_service')"
+            ).fetchall())
+        return f"{NOTICE_VERSION}-p{rows.get('legal.privacy_notice',0)}-t{rows.get('legal.terms_of_service',0)}"
+
     @contextmanager
     def connection():
         conn = sqlite3.connect(db, timeout=10, isolation_level=None)
@@ -177,7 +216,7 @@ def create_app(db_path=None, *, encryption_key=None, client_id=None, client_secr
             id TEXT NOT NULL, position INTEGER NOT NULL,
             title_enc TEXT NOT NULL, school_enc TEXT NOT NULL,
             location_enc TEXT NOT NULL, notes_enc TEXT NOT NULL,
-            type TEXT NOT NULL, day INTEGER NOT NULL, start TEXT NOT NULL, end TEXT NOT NULL,
+            type TEXT NOT NULL, schedule_enc TEXT NOT NULL,
             source_id TEXT, catalog_id TEXT,
             PRIMARY KEY (athlete_id, collection, id)
         );
@@ -189,6 +228,12 @@ def create_app(db_path=None, *, encryption_key=None, client_id=None, client_secr
         CREATE TABLE IF NOT EXISTS login_attempts (
             ip_hash TEXT PRIMARY KEY, window_start INTEGER NOT NULL,
             attempts INTEGER NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS privacy_ack (
+            owner_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+            notice_version TEXT NOT NULL,
+            acknowledged_at INTEGER NOT NULL,
+            adult_statement INTEGER NOT NULL CHECK(adult_statement IN (0,1))
         );
         CREATE TABLE IF NOT EXISTS sessions (
             token_hash TEXT PRIMARY KEY, owner_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -205,6 +250,52 @@ def create_app(db_path=None, *, encryption_key=None, client_id=None, client_secr
         else:
             conn.execute("INSERT INTO app_config(key,value) VALUES(?,?)",
                          ("encryption_check", encrypted("configured", "app_config:encryption_check")))
+        # V2: encrypt day/start/end, which can reveal the routines of minors.
+        # Migrate older owned databases only AFTER verifying the encryption key.
+        cols = {col[1] for col in conn.execute("PRAGMA table_info(items)")}
+        if "schedule_enc" not in cols:
+            if os.getenv("APP_ALLOW_SCHEDULE_MIGRATION") != "1":
+                raise RuntimeError(
+                    "Migracao de horarios exige backup aprovado e APP_ALLOW_SCHEDULE_MIGRATION=1"
+                )
+            if not {"day", "start", "end"}.issubset(cols):
+                raise RuntimeError("Esquema de horários incompatível; restaure backup e revise migração")
+            conn.execute("BEGIN IMMEDIATE")
+            try:
+                conn.execute("""CREATE TABLE items_schedule_v2 (
+                    athlete_id TEXT NOT NULL REFERENCES athletes(id) ON DELETE CASCADE,
+                    collection TEXT NOT NULL CHECK(collection IN ('events','available')),
+                    id TEXT NOT NULL, position INTEGER NOT NULL,
+                    title_enc TEXT NOT NULL, school_enc TEXT NOT NULL,
+                    location_enc TEXT NOT NULL, notes_enc TEXT NOT NULL,
+                    type TEXT NOT NULL, schedule_enc TEXT NOT NULL,
+                    source_id TEXT, catalog_id TEXT,
+                    PRIMARY KEY (athlete_id, collection, id)
+                )""")
+                legacy_rows = conn.execute("SELECT * FROM items").fetchall()
+                for row in legacy_rows:
+                    schedule = json.dumps({"day": row["day"], "start": row["start"], "end": row["end"]},
+                                          separators=(",", ":"), ensure_ascii=False)
+                    aad = f"items:{row['athlete_id']}:{row['collection']}:{row['id']}:schedule"
+                    conn.execute("""INSERT INTO items_schedule_v2 (
+                        athlete_id,collection,id,position,title_enc,school_enc,location_enc,notes_enc,
+                        type,schedule_enc,source_id,catalog_id
+                    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""", (
+                        row["athlete_id"], row["collection"], row["id"], row["position"],
+                        row["title_enc"], row["school_enc"], row["location_enc"], row["notes_enc"],
+                        row["type"], encrypted(schedule, aad), row["source_id"], row["catalog_id"]
+                    ))
+                conn.execute("DROP TABLE items")
+                conn.execute("ALTER TABLE items_schedule_v2 RENAME TO items")
+                conn.commit()
+            except Exception:
+                conn.rollback()
+                raise
+        elif {"day", "start", "end"} & cols:
+            raise RuntimeError("Esquema híbrido pode expor horários; revisão manual necessária")
+    # Shared database for athletes, authentication, obligations and generic settings.
+    with connection() as conn:
+        ensure_settings(conn)
     if os.name == "posix":
         os.chmod(db, 0o600)
 
@@ -249,10 +340,15 @@ def create_app(db_path=None, *, encryption_key=None, client_id=None, client_secr
             raise HTTPException(401, "Faça login com sua conta Google")
         hashed = sha256(token.encode()).hexdigest()
         with connection() as conn:
-            row = conn.execute("SELECT owner_id, csrf FROM sessions WHERE token_hash=? AND expires>?", (hashed, int(time.time()))).fetchone()
+            row = conn.execute("SELECT owner_id, csrf, expires FROM sessions WHERE token_hash=? AND expires>?", (hashed, int(time.time()))).fetchone()
         if row is None:
             raise HTTPException(401, "Sessão expirada")
-        return {"owner_id": row["owner_id"], "csrf": row["csrf"]}
+        return {"owner_id": row["owner_id"], "csrf": row["csrf"], "expires": row["expires"]}
+
+    def admin_guard(session=Depends(session_for)):
+        if not is_admin(session["owner_id"]):
+            raise HTTPException(403, "Acesso restrito ao administrador")
+        return session
 
     def csrf_guard(request: Request, session=Depends(session_for)):
         if not secrets.compare_digest(request.headers.get("X-CSRF-Token", ""), session["csrf"]):
@@ -280,6 +376,18 @@ def create_app(db_path=None, *, encryption_key=None, client_id=None, client_secr
     @app.get("/static/app.js", include_in_schema=False)
     def app_javascript(session=Depends(session_for)):
         return FileResponse(WEB_DIR / "app.js", media_type="text/javascript; charset=utf-8")
+
+    @app.get("/account", include_in_schema=False)
+    def account_page(session=Depends(session_for)):
+        return FileResponse(WEB_DIR / "account.html", media_type="text/html; charset=utf-8")
+
+    @app.get("/static/account.js", include_in_schema=False)
+    def account_javascript(session=Depends(session_for)):
+        return FileResponse(WEB_DIR / "account.js", media_type="text/javascript; charset=utf-8")
+
+    @app.get("/static/account.css", include_in_schema=False)
+    def account_styles(session=Depends(session_for)):
+        return FileResponse(WEB_DIR / "account.css", media_type="text/css; charset=utf-8")
 
     @app.get("/auth/google/start")
     def login_start(request: Request):
@@ -386,12 +494,180 @@ def create_app(db_path=None, *, encryption_key=None, client_id=None, client_secr
 
     @app.get("/api/auth/me")
     def me(session=Depends(session_for)):
-        return {"authenticated": True, "csrfToken": session["csrf"]}
+        return {"authenticated": True, "csrfToken": session["csrf"],
+                "ownerId": session["owner_id"], "isAdmin": is_admin(session["owner_id"])}
 
     @app.post("/api/auth/logout")
     def logout(request: Request, session=Depends(csrf_guard)):
         with connection() as conn:
             conn.execute("DELETE FROM sessions WHERE token_hash=?", (sha256(request.cookies["ada_session"].encode()).hexdigest(),))
+        response = Response(status_code=204)
+        response.delete_cookie("ada_session", path="/")
+        return response
+
+    @app.get("/admin", include_in_schema=False)
+    def administrator_page(session=Depends(admin_guard)):
+        return FileResponse(WEB_DIR / "admin.html", media_type="text/html; charset=utf-8")
+
+    @app.get("/static/admin.css", include_in_schema=False)
+    def administrator_styles(session=Depends(admin_guard)):
+        return FileResponse(WEB_DIR / "admin.css", media_type="text/css; charset=utf-8")
+
+    @app.get("/static/admin.js", include_in_schema=False)
+    def administrator_script(session=Depends(admin_guard)):
+        return FileResponse(WEB_DIR / "admin.js", media_type="text/javascript; charset=utf-8")
+
+    @app.get("/api/admin/settings")
+    def get_admin_settings(session=Depends(admin_guard)):
+        with connection() as conn:
+            items = fetch_settings(conn)
+            audit = [dict(row) for row in conn.execute(
+                "SELECT key,revision,actor_id,updated_at FROM app_settings_audit ORDER BY id DESC LIMIT 15"
+            ).fetchall()]
+        evidence = [x for x in items if x["kind"] == "obligation"]
+        return {"version":"2.0.0-rc.1", "settings":items, "recentChanges":audit,
+                "obligations":{"total":len(evidence),
+                  "recorded":sum(x["value"]["status"]=="evidence_recorded" for x in evidence),
+                  "inReview":sum(x["value"]["status"]=="in_review" for x in evidence)},
+                "commercialStatus":"NAO_LIBERADO",
+                "message":"Registro de evidências não é certificação jurídica nem autorização de deploy."}
+
+    @app.put("/api/admin/settings/{setting_key}")
+    def update_admin_setting(setting_key: str, data: SettingUpdate, session=Depends(csrf_guard)):
+        if not is_admin(session["owner_id"]):
+            raise HTTPException(403, "Acesso restrito ao administrador")
+        if setting_key not in ALL_DEFINITIONS:
+            raise HTTPException(404, "Parâmetro não encontrado")
+        try:
+            clean_value = validate_value(setting_key,data.value)
+        except ValueError as exc:
+            raise HTTPException(422,str(exc)) from None
+        now = int(time.time())
+        with connection() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            try:
+                row = conn.execute("SELECT revision FROM app_settings WHERE key=?", (setting_key,)).fetchone()
+                if row is None or row["revision"] != data.revision:
+                    raise HTTPException(409, "Parâmetro modificado em outra sessão. Recarregue.")
+                revision = data.revision + 1
+                conn.execute(
+                    """UPDATE app_settings SET value_json=?,revision=?,updated_by=?,updated_at=?
+                       WHERE key=? AND revision=?""",
+                    (json.dumps(clean_value,ensure_ascii=False),revision,
+                     session["owner_id"],now,setting_key,data.revision),
+                )
+                conn.execute(
+                    "INSERT INTO app_settings_audit(key,revision,actor_id,updated_at) VALUES(?,?,?,?)",
+                    (setting_key,revision,session["owner_id"],now),
+                )
+                conn.commit()
+            except Exception:
+                conn.rollback()
+                raise
+        return {"key":setting_key,"value":clean_value,"revision":revision,"updated_at":now}
+
+    @app.get("/api/privacy")
+    def privacy_notice(session=Depends(session_for)):
+        with connection() as conn:
+            keys = ("brand.product_name","supplier.legal_name","brand.support_email",
+                    "legal.privacy_notice","legal.terms_of_service")
+            values = {row["key"]: json.loads(row["value_json"]) for row in conn.execute(
+                "SELECT key,value_json FROM app_settings WHERE key IN (?,?,?,?,?)", keys
+            )}
+        return {
+            "version": current_notice_version(), "status": "draft_pending_legal_review",
+            "audience": "Conta administrada por pessoa adulta; acesso direto por menores nao previsto.",
+            "data_categories": ["identificador Google derivado", "nome do atleta",
+                                "escola, local, atividade, observacoes", "dia e horario"],
+            "purpose": "Organizacao privada de atividades de atletas pelo responsavel da conta.",
+            "product_name": values.get("brand.product_name","Agenda do Atleta Pro"),
+            "supplier": values.get("supplier.legal_name",""),
+            "support_email": values.get("brand.support_email",""),
+            "privacy_notice": values.get("legal.privacy_notice",""),
+            "terms_of_service": values.get("legal.terms_of_service",""),
+            "third_party_login": "Google OAuth para autenticacao; o email nao e armazenado.",
+            "export": "/api/account/export", "deletion": "/api/account",
+            "warning": "Aviso informativo de homologacao: nao substitui politica de privacidade juridicamente aprovada.",
+        }
+
+    @app.get("/api/privacy/ack")
+    def get_privacy_ack(session=Depends(session_for)):
+        with connection() as conn:
+            row = conn.execute(
+                "SELECT notice_version,acknowledged_at,adult_statement FROM privacy_ack WHERE owner_id=?",
+                (session["owner_id"],),
+            ).fetchone()
+        current_version = current_notice_version()
+        return {"acknowledged": row is not None and row["notice_version"] == current_version,
+                "notice_version": row["notice_version"] if row else None,
+                "current_version": current_version,
+                "adult_statement": bool(row["adult_statement"]) if row else False}
+
+    @app.post("/api/privacy/ack")
+    def acknowledge_privacy(data: PrivacyAcknowledgement, session=Depends(csrf_guard)):
+        if not data.read_notice or not data.responsible_adult:
+            raise HTTPException(400, "Exige-se declaracao expressa de leitura e responsabilidade adulta")
+        with connection() as conn:
+            conn.execute(
+                """INSERT INTO privacy_ack(owner_id,notice_version,acknowledged_at,adult_statement)
+                   VALUES (?,?,?,1) ON CONFLICT(owner_id)
+                   DO UPDATE SET notice_version=excluded.notice_version,
+                                 acknowledged_at=excluded.acknowledged_at,adult_statement=1""",
+                (session["owner_id"], current_notice_version(), int(time.time())),
+            )
+        return {"acknowledged": True, "notice_version": current_notice_version(),
+                "note": "Autodeclaracao registrada; nao comprova tutela nem consentimento juridico."}
+
+    @app.get("/api/account/export")
+    def export_account(session=Depends(session_for)):
+        """Return only the logged-in owner's account data, decrypted for download."""
+        owner = session["owner_id"]
+        result = []
+        with connection() as conn:
+            athletes = conn.execute(
+                "SELECT id,name_enc,revision FROM athletes WHERE owner_id=? ORDER BY id", (owner,)
+            ).fetchall()
+            for athlete in athletes:
+                aid = athlete["id"]
+                data = {"id": aid, "name": decrypted(athlete["name_enc"], f"athletes:{aid}:name"),
+                        "revision": athlete["revision"], "events": [], "available": []}
+                for row in conn.execute(
+                    "SELECT * FROM items WHERE athlete_id=? ORDER BY collection,position", (aid,)
+                ):
+                    aad = lambda field: f"items:{aid}:{row['collection']}:{row['id']}:{field}"
+                    item = {"id": row["id"], "type": row["type"], **json.loads(decrypted(row["schedule_enc"], aad("schedule"))),
+                            "title": decrypted(row["title_enc"], aad("title")),
+                            "school": decrypted(row["school_enc"], aad("school")),
+                            "location": decrypted(row["location_enc"], aad("location")),
+                            "notes": decrypted(row["notes_enc"], aad("notes"))}
+                    if row["source_id"]:
+                        item["sourceId"] = row["source_id"]
+                    if row["catalog_id"]:
+                        item["catalogId"] = row["catalog_id"]
+                    data[row["collection"]].append(item)
+                result.append(data)
+        return {"app": "Agenda do Atleta", "format": "account-export-v1", "athletes": result}
+
+    @app.delete("/api/account")
+    def delete_account(data: AccountDeletionRequest, session=Depends(csrf_guard)):
+        """Remove current account and its athletes; backups remain independently managed."""
+        # Account erasure is high impact; require login within the last 5 minutes.
+        if int(time.time()) > session["expires"] - SESSION_TTL + 5 * 60:
+            raise HTTPException(403, "Faça login novamente antes de excluir a conta")
+        if data.confirmation != "EXCLUIR_MINHA_CONTA_E_ATLETAS":
+            raise HTTPException(400, "Confirmação de exclusão inválida")
+        owner = session["owner_id"]
+        with connection() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            try:
+                conn.execute("DELETE FROM items WHERE athlete_id IN (SELECT id FROM athletes WHERE owner_id=?)", (owner,))
+                conn.execute("DELETE FROM athletes WHERE owner_id=?", (owner,))
+                conn.execute("DELETE FROM sessions WHERE owner_id=?", (owner,))
+                conn.execute("DELETE FROM users WHERE id=?", (owner,))
+                conn.commit()
+            except Exception:
+                conn.rollback()
+                raise
         response = Response(status_code=204)
         response.delete_cookie("ada_session", path="/")
         return response
@@ -442,8 +718,7 @@ def create_app(db_path=None, *, encryption_key=None, client_id=None, client_secr
             result = {"revision": athlete["revision"], "events": [], "available": []}
             for row in conn.execute("SELECT * FROM items WHERE athlete_id=? ORDER BY collection,position", (aid,)):
                 aad = lambda field: f"items:{aid}:{row['collection']}:{row['id']}:{field}"
-                item = {"id": row["id"], "type": row["type"], "day": row["day"],
-                        "start": row["start"], "end": row["end"],
+                item = {"id": row["id"], "type": row["type"], **json.loads(decrypted(row["schedule_enc"], aad("schedule"))),
                         "title": decrypted(row["title_enc"], aad("title")),
                         "school": decrypted(row["school_enc"], aad("school")),
                         "location": decrypted(row["location_enc"], aad("location")),
@@ -468,12 +743,14 @@ def create_app(db_path=None, *, encryption_key=None, client_id=None, client_secr
                     for index, item in enumerate(getattr(data, collection)):
                         aad = lambda field: f"items:{aid}:{collection}:{item.id}:{field}"
                         conn.execute("""INSERT INTO items(athlete_id,collection,id,position,title_enc,school_enc,
-                            location_enc,notes_enc,type,day,start,end,source_id,catalog_id)
-                            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""", (
+                            location_enc,notes_enc,type,schedule_enc,source_id,catalog_id)
+                            VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""", (
                             aid, collection, item.id, index, encrypted(item.title, aad("title")),
                             encrypted(item.school, aad("school")), encrypted(item.location, aad("location")),
-                            encrypted(item.notes, aad("notes")), item.type, item.day, item.start,
-                            item.end, item.sourceId, item.catalogId,
+                            encrypted(item.notes, aad("notes")), item.type,
+                            encrypted(json.dumps({"day":item.day,"start":item.start,"end":item.end},
+                                                 separators=(",",":")), aad("schedule")),
+                            item.sourceId, item.catalogId,
                         ))
                 revision = athlete["revision"] + 1
                 conn.execute("UPDATE athletes SET revision=? WHERE id=? AND owner_id=?", (revision, aid, session["owner_id"]))

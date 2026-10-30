@@ -282,3 +282,174 @@ def test_source_and_catalog_id_saved_after_restart(setup):
     with TestClient(app2) as c2:
         sign_in(c2, db, claims, "catalog-user")
         assert c2.get(f"/api/athletes/{aid}/state").json()["events"] == [event]
+def test_owner_export_contains_only_own_athletes(setup):
+    app, db, _, claims = setup
+    with TestClient(app) as alice:
+        csrf = sign_in(alice, db, claims, "export-alice")
+        aid = alice.get("/api/athletes").json()[0]["id"]
+        saved = alice.put(
+            f"/api/athletes/{aid}/state", headers={"X-CSRF-Token": csrf},
+            json={"revision": 0, "events": [sample_item()], "available": []},
+        )
+        assert saved.status_code == 200, saved.text
+        with TestClient(app) as bob:
+            sign_in(bob, db, claims, "export-bob")
+            response = bob.get("/api/account/export")
+            assert response.status_code == 200
+            assert aid not in response.text
+            assert "Consulta particular 123" not in response.text
+        exported = alice.get("/api/account/export")
+        assert exported.status_code == 200
+        assert exported.headers["cache-control"] == "no-store"
+        payload = exported.json()
+        assert payload["format"] == "account-export-v1"
+        assert payload["athletes"][0]["events"][0]["title"] == "Consulta particular 123"
+        assert payload["athletes"][0]["id"] == aid
+        assert "google-person-1" not in exported.text
+
+
+def test_account_deletion_requires_csrf_and_exact_confirmation(setup):
+    app, db, _, claims = setup
+    with TestClient(app) as alice:
+        csrf = sign_in(alice, db, claims, "remove-alice")
+        aid = alice.get("/api/athletes").json()[0]["id"]
+        with TestClient(app) as bob:
+            sign_in(bob, db, claims, "remove-bob")
+            bob_id = bob.get("/api/athletes").json()[0]["id"]
+            invalid = alice.request("DELETE", "/api/account", json={"confirmation": "EXCLUIR_MINHA_CONTA_E_ATLETAS"})
+            assert invalid.status_code == 403
+            invalid = alice.request("DELETE", "/api/account", headers={"X-CSRF-Token": csrf},
+                                    json={"confirmation": "sim"})
+            assert invalid.status_code == 400
+            assert alice.get("/api/athletes").status_code == 200
+            done = alice.request("DELETE", "/api/account", headers={"X-CSRF-Token": csrf},
+                                 json={"confirmation": "EXCLUIR_MINHA_CONTA_E_ATLETAS"})
+            assert done.status_code == 204
+            assert alice.get("/api/account/export").status_code == 401
+            assert bob.get("/api/athletes").json()[0]["id"] == bob_id
+            assert bob.get(f"/api/athletes/{aid}/state").status_code == 404
+            with sqlite3.connect(db) as conn:
+                assert conn.execute("SELECT COUNT(*) FROM users").fetchone()[0] == 1
+                assert conn.execute("SELECT COUNT(*) FROM athletes").fetchone()[0] == 1
+
+def test_privacy_notice_and_explicit_adult_acknowledgement(setup):
+    app, db, _, claims = setup
+    with TestClient(app) as client:
+        assert client.get("/account").status_code == 401
+        assert client.get("/api/privacy").status_code == 401
+        csrf = sign_in(client, db, claims, "privacy-user")
+        notice = client.get("/api/privacy")
+        assert notice.status_code == 200
+        assert notice.json()["status"] == "draft_pending_legal_review"
+        assert client.get("/account").status_code == 200
+        assert client.get("/static/account.js").status_code == 200
+        assert client.get("/static/account.css").status_code == 200
+        assert not client.get("/api/privacy/ack").json()["acknowledged"]
+        invalid = client.post("/api/privacy/ack", json={"read_notice": True, "responsible_adult": True})
+        assert invalid.status_code == 403
+        invalid = client.post("/api/privacy/ack", headers={"X-CSRF-Token": csrf},
+                              json={"read_notice": True, "responsible_adult": False})
+        assert invalid.status_code == 400
+        acknowledged = client.post("/api/privacy/ack", headers={"X-CSRF-Token": csrf},
+                                    json={"read_notice": True, "responsible_adult": True})
+        assert acknowledged.status_code == 200
+        assert acknowledged.json()["acknowledged"]
+        assert client.get("/api/privacy/ack").json()["adult_statement"] is True
+        with sqlite3.connect(db) as conn:
+            assert conn.execute("SELECT COUNT(*) FROM privacy_ack").fetchone()[0] == 1
+
+
+def test_privacy_declaration_is_scoped_and_erased_with_owner(setup):
+    app, db, _, claims = setup
+    with TestClient(app) as alice:
+        csrf_a = sign_in(alice, db, claims, "ack-alice")
+        assert alice.post("/api/privacy/ack", headers={"X-CSRF-Token":csrf_a},
+                          json={"read_notice":True,"responsible_adult":True}).status_code == 200
+        with TestClient(app) as bob:
+            sign_in(bob, db, claims, "ack-bob")
+            assert not bob.get("/api/privacy/ack").json()["acknowledged"]
+            assert alice.request("DELETE", "/api/account", headers={"X-CSRF-Token":csrf_a},
+                                  json={"confirmation":"EXCLUIR_MINHA_CONTA_E_ATLETAS"}).status_code == 204
+            with sqlite3.connect(db) as conn:
+                assert conn.execute("SELECT COUNT(*) FROM privacy_ack").fetchone()[0] == 0
+            assert bob.get("/api/athletes").status_code == 200
+
+def test_schedule_is_ciphertext_and_roundtrips(setup):
+    app, db, _, claims = setup
+    with TestClient(app) as client:
+        csrf = sign_in(client, db, claims, "schedule-private")
+        aid = client.get("/api/athletes").json()[0]["id"]
+        saved = client.put(f"/api/athletes/{aid}/state", headers={"X-CSRF-Token": csrf},
+                           json={"revision": 0, "events": [sample_item()], "available": []})
+        assert saved.status_code == 200, saved.text
+        assert client.get(f"/api/athletes/{aid}/state").json()["events"][0]["start"] == "15:00"
+        assert client.get("/api/account/export").json()["athletes"][0]["events"][0]["day"] == 2
+    with sqlite3.connect(db) as conn:
+        names = {row[1] for row in conn.execute("PRAGMA table_info(items)")}
+        assert "schedule_enc" in names
+        assert not {"day", "start", "end"} & names
+        assert conn.execute("SELECT schedule_enc FROM items LIMIT 1").fetchone()[0].startswith("enc:v1:")
+    assert b"15:00" not in db.read_bytes()
+
+
+def test_owned_database_schedule_migrates_transactionally(setup, monkeypatch):
+    app, db, secret, claims = setup
+    with TestClient(app) as client:
+        csrf = sign_in(client, db, claims, "schedule-migration")
+        aid = client.get("/api/athletes").json()[0]["id"]
+        assert client.put(f"/api/athletes/{aid}/state", headers={"X-CSRF-Token": csrf},
+                          json={"revision": 0, "events": [sample_item()], "available": []}).status_code == 200
+    # Rebuild a copy of the old owned-DB schema to reproduce an existing installation.
+    with sqlite3.connect(db) as conn:
+        conn.executescript("""
+            ALTER TABLE items RENAME TO items_encrypted_old;
+            CREATE TABLE items (
+                athlete_id TEXT NOT NULL REFERENCES athletes(id) ON DELETE CASCADE,
+                collection TEXT NOT NULL CHECK(collection IN ('events','available')),
+                id TEXT NOT NULL, position INTEGER NOT NULL,
+                title_enc TEXT NOT NULL, school_enc TEXT NOT NULL,
+                location_enc TEXT NOT NULL, notes_enc TEXT NOT NULL,
+                type TEXT NOT NULL, day INTEGER NOT NULL, start TEXT NOT NULL, end TEXT NOT NULL,
+                source_id TEXT, catalog_id TEXT,
+                PRIMARY KEY (athlete_id, collection, id)
+            );
+            INSERT INTO items(athlete_id,collection,id,position,title_enc,school_enc,
+                             location_enc,notes_enc,type,day,start,end,source_id,catalog_id)
+                SELECT athlete_id,collection,id,position,title_enc,school_enc,
+                       location_enc,notes_enc,type,2,'15:00','16:00',source_id,catalog_id
+                FROM items_encrypted_old;
+            DROP TABLE items_encrypted_old;
+        """)
+    with pytest.raises(RuntimeError, match="APP_ALLOW_SCHEDULE_MIGRATION"):
+        create_app(db, encryption_key=secret, client_id=CLIENT_ID, client_secret=SECRET,
+                   redirect_uri=LOCAL_URI)
+    monkeypatch.setenv("APP_ALLOW_SCHEDULE_MIGRATION", "1")
+    migrated = create_app(db, encryption_key=secret, client_id=CLIENT_ID, client_secret=SECRET,
+                          redirect_uri=LOCAL_URI, token_exchange=lambda *args: {"id_token":"verified-token"},
+                          token_verifier=lambda *args: claims.copy())
+    with TestClient(migrated) as client:
+        sign_in(client, db, claims, "schedule-migration")
+        state = client.get(f"/api/athletes/{aid}/state").json()
+        assert state["events"][0]["start"] == "15:00"
+        assert state["events"][0]["title"] == "Consulta particular 123"
+        assert state["revision"] == 1
+    with sqlite3.connect(db) as conn:
+        columns = {row[1] for row in conn.execute("PRAGMA table_info(items)")}
+        assert "schedule_enc" in columns and "start" not in columns
+        assert conn.execute("SELECT COUNT(*) FROM items").fetchone()[0] == 1
+
+def test_irreversible_account_erasure_requires_recent_google_session(setup):
+    app, db, _, claims = setup
+    with TestClient(app) as client:
+        csrf = sign_in(client, db, claims, "erase-old-session")
+        with sqlite3.connect(db) as conn:
+            conn.execute("UPDATE sessions SET expires=expires-3600")
+        response = client.request(
+            "DELETE", "/api/account", headers={"X-CSRF-Token": csrf},
+            json={"confirmation": "EXCLUIR_MINHA_CONTA_E_ATLETAS"},
+        )
+        assert response.status_code == 403
+        assert "login novamente" in response.text
+        assert client.get("/api/athletes").status_code == 200
+        with sqlite3.connect(db) as conn:
+            assert conn.execute("SELECT COUNT(*) FROM users").fetchone()[0] == 1
