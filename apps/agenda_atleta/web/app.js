@@ -59,6 +59,11 @@ async function switchAthlete(athleteId){
 async function initialize(){
  setSaveStatus('Carregando...','saving');
  const auth=await api('/api/auth/me'); csrfToken=auth.csrfToken;
+ if(auth.isAdmin){
+   const link=document.createElement('a');link.href='/admin';link.className='btn btn-outline';
+   link.textContent='Administração';link.title='Parametrizações e obrigações do produto';
+   const target=$('logoutBtn');target.parentNode.insertBefore(link,target);
+ }
  athletes=await api('/api/athletes');
  if(!athletes.length)throw Error('Nenhum atleta disponível no banco de dados.');
  await switchAthlete(athletes[0].id);
