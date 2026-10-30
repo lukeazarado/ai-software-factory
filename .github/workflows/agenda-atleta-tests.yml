@@ -1,6 +1,9 @@
-name: Testar Agenda do Atleta (manual)
+name: Testar Agenda do Atleta (CI e manual)
 
 on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review]
   workflow_dispatch:
 
 permissions:
@@ -11,8 +14,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.11'
       - name: Instalar dependências
@@ -20,7 +25,7 @@ jobs:
           python -m pip install -r apps/agenda_atleta/requirements.txt
           python -m pip install 'pytest>=8'
       - name: Verificar sintaxe Python
-        run: python -m compileall -q apps/agenda_atleta
+        run: python -m compileall -q apps/agenda_atleta factory
       - name: Verificar sintaxe JavaScript da Agenda
         run: node --check apps/agenda_atleta/web/app.js
       - name: Executar suíte automatizada
