@@ -81,6 +81,15 @@ class State(BaseModel):
         return self
 
 
+NOTICE_VERSION = "2026-10-30-draft-1"
+
+
+class PrivacyAcknowledgement(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    read_notice: bool
+    responsible_adult: bool
+
+
 class AccountDeletionRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     confirmation: str
@@ -194,6 +203,12 @@ def create_app(db_path=None, *, encryption_key=None, client_id=None, client_secr
         CREATE TABLE IF NOT EXISTS login_attempts (
             ip_hash TEXT PRIMARY KEY, window_start INTEGER NOT NULL,
             attempts INTEGER NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS privacy_ack (
+            owner_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+            notice_version TEXT NOT NULL,
+            acknowledged_at INTEGER NOT NULL,
+            adult_statement INTEGER NOT NULL CHECK(adult_statement IN (0,1))
         );
         CREATE TABLE IF NOT EXISTS sessions (
             token_hash TEXT PRIMARY KEY, owner_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -400,6 +415,44 @@ def create_app(db_path=None, *, encryption_key=None, client_id=None, client_secr
         response = Response(status_code=204)
         response.delete_cookie("ada_session", path="/")
         return response
+
+    @app.get("/api/privacy")
+    def privacy_notice(session=Depends(session_for)):
+        return {
+            "version": NOTICE_VERSION, "status": "draft_pending_legal_review",
+            "audience": "Conta administrada por pessoa adulta; acesso direto por menores nao previsto.",
+            "data_categories": ["identificador Google derivado", "nome do atleta",
+                                "escola, local, atividade, observacoes", "dia e horario"],
+            "purpose": "Organizacao privada de atividades de atletas pelo responsavel da conta.",
+            "third_party_login": "Google OAuth para autenticacao; o email nao e armazenado.",
+            "export": "/api/account/export", "deletion": "/api/account",
+            "warning": "Aviso informativo de homologacao: nao substitui politica de privacidade juridicamente aprovada.",
+        }
+
+    @app.get("/api/privacy/ack")
+    def get_privacy_ack(session=Depends(session_for)):
+        with connection() as conn:
+            row = conn.execute(
+                "SELECT notice_version,acknowledged_at,adult_statement FROM privacy_ack WHERE owner_id=?",
+                (session["owner_id"],),
+            ).fetchone()
+        return {"acknowledged": row is not None, "notice_version": row["notice_version"] if row else None,
+                "adult_statement": bool(row["adult_statement"]) if row else False}
+
+    @app.post("/api/privacy/ack")
+    def acknowledge_privacy(data: PrivacyAcknowledgement, session=Depends(csrf_guard)):
+        if not data.read_notice or not data.responsible_adult:
+            raise HTTPException(400, "Exige-se declaracao expressa de leitura e responsabilidade adulta")
+        with connection() as conn:
+            conn.execute(
+                """INSERT INTO privacy_ack(owner_id,notice_version,acknowledged_at,adult_statement)
+                   VALUES (?,?,?,1) ON CONFLICT(owner_id)
+                   DO UPDATE SET notice_version=excluded.notice_version,
+                                 acknowledged_at=excluded.acknowledged_at,adult_statement=1""",
+                (session["owner_id"], NOTICE_VERSION, int(time.time())),
+            )
+        return {"acknowledged": True, "notice_version": NOTICE_VERSION,
+                "note": "Autodeclaracao registrada; nao comprova tutela nem consentimento juridico."}
 
     @app.get("/api/account/export")
     def export_account(session=Depends(session_for)):
