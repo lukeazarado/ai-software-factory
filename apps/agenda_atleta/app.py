@@ -230,6 +230,10 @@ def create_app(db_path=None, *, encryption_key=None, client_id=None, client_secr
         # Migrate older owned databases only AFTER verifying the encryption key.
         cols = {col[1] for col in conn.execute("PRAGMA table_info(items)")}
         if "schedule_enc" not in cols:
+            if os.getenv("APP_ALLOW_SCHEDULE_MIGRATION") != "1":
+                raise RuntimeError(
+                    "Migracao de horarios exige backup aprovado e APP_ALLOW_SCHEDULE_MIGRATION=1"
+                )
             if not {"day", "start", "end"}.issubset(cols):
                 raise RuntimeError("Esquema de horários incompatível; restaure backup e revise migração")
             conn.execute("BEGIN IMMEDIATE")
