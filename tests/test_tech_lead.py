@@ -16,7 +16,7 @@ def test_fail_closed_gate():
     assert gate_status("APROVADO", "PASSOU: verificações básicas") == "AGUARDANDO_REVISAO_HUMANA"
     assert gate_status("APROVADO", "FALHOU: index ausente") == "AJUSTES_OBRIGATORIOS"
     assert gate_status("AJUSTES_OBRIGATORIOS", "PASSOU: verificação") == "AJUSTES_OBRIGATORIOS"
-    assert gate_status("NAO_VERIFICADO", "PASSOU: verificação") == "REVISAO_INCONCLUSIVA"
+    assert gate_status("NAO_VERIFICADO", "PASSOU: verificação") == "NAO_VERIFICADO"
 
 
 @pytest.mark.parametrize("repo", ["../foo", "org/repo/extra", "https://github.com/o/r", "..//r", "x/..", "", "a/b?c"])

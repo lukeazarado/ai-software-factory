@@ -50,13 +50,13 @@ def parse_verdict(text: str) -> str:
     return matches[0] if len(matches) == 1 else "NAO_VERIFICADO"
 
 
-def gate_status(verdict: str, static_validation: str) -> str:
+def gate_status(verdict: str, static_validation: str, qa_result: str = "PASSOU") -> str:
     """Static failure always blocks even when an LLM would approve."""
-    if not static_validation.startswith("PASSOU:") or verdict == "AJUSTES_OBRIGATORIOS":
+    if not static_validation.startswith("PASSOU:") or verdict == "AJUSTES_OBRIGATORIOS" or qa_result == "FALHOU":
         return "AJUSTES_OBRIGATORIOS"
-    if verdict == "APROVADO":
+    if verdict == "APROVADO" and qa_result == "PASSOU":
         return "AGUARDANDO_REVISAO_HUMANA"
-    return "REVISAO_INCONCLUSIVA"
+    return "NAO_VERIFICADO"
 
 
 def validate_repo(repo: str, pr_number: int) -> None:
