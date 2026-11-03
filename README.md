@@ -57,3 +57,48 @@ Os testes unitários usam simulações do SDK e API GitHub; não cobram tokens. 
 - Diffs e descrições de PR são conteúdo **não confiável**: devem ser tratados como evidência, não instruções.
 - A inspeção estática do MVP não substitui testes funcionais/E2E, revisão de segurança aprofundada nem autorização humana.
 - O CI da Agenda é executado **automaticamente em PRs** para `main`; ao concluir, o workflow **Tech Lead - revisar PR apos QA** identifica o PR e publica um parecer consultivo. Por padrão, esse parecer é `NAO_VERIFICADO` quando o CI passou, pois a análise por IA fica desabilitada até opt-in explícito. Consulte [Automação de PRs](docs/PR_AUTOMATION.md) para habilitar a análise de diff via IA (requer segredo, orçamento e pode gerar custos). Nenhum workflow aprova ou faz merge automaticamente.
+
+## Ciclo local de correção Dev → QA
+
+Por padrão, o runner mantém uma implementação e um QA. Para autorizar **uma única
+correção adicional** (duas tentativas totais, com possível custo adicional de API):
+
+```bash
+python -m factory.runner --project meu-portal --prompt "Crie um portal" --allow-correction
+```
+
+PO e Arquiteto rodam uma vez. QA reprovado ou validação estática com falha permite
+uma correção; QA inconclusivo sem falha estática encerra o ciclo. O Tech Lead roda
+uma vez ao final, somente com ferramentas de leitura, inclusive quando persistem
+falhas. Seu parecer não supera falhas do QA ou da validação estática e nunca
+autoriza merge/deploy. Resultados inconclusivos usam `NAO_VERIFICADO`.
+
+Limites configuráveis: `--max-turns` (12 por agente), `--timeout-seconds` (120 por
+agente), `--max-output-tokens` (4000 por resposta) e `--token-budget` (100000 tokens
+observados na execução). O orçamento é conferido entre etapas e após cada agente;
+não é um teto financeiro rígido nem uma reserva prévia para o Tech Lead. Uma chamada
+em andamento pode excedê-lo. Chamadas interrompidas podem consumir tokens sem uso
+retornado; retentativas internas do provedor também não são um orçamento monetário.
+Configure controles de gastos no provedor antes de executar. Não há repetição de
+etapas após erros pelo orquestrador. Timeout/erro/orçamento encerram o fluxo com
+`NAO_VERIFICADO`, relatório parcial e indicação de TL não executado, quando aplicável.
+
+O JSON preserva os campos finais existentes e adiciona histórico `attempts`, contagem,
+limite, motivo de parada, uso retornado pelo SDK e indicação de execução do TL.
+A validação estática continua básica e não substitui testes funcionais ou E2E.
+
+Interrupções operacionais retornam código **1** na CLI, preservando o relatório
+quando seu diretório estiver acessível. `execute()` continua retornando `Path`;
+integrações programáticas podem consultar `interrupted` e `error_category`.
+Falhas de leitura do HTML na finalização produzem validação e status
+`NAO_VERIFICADO`, sem detalhes da exceção. Falhas ao gravar o próprio relatório
+ainda podem impedir sua produção; a CLI retorna erro sanitizado nesse caso.
+
+`stages` distingue invocação iniciada (`executed`), conclusão (`completed`) e
+resultado retornado (`result_available`), com saída e uso disponíveis. Invocação
+iniciada não comprova processamento remoto; uso não retornado fica `null`.
+`tech_lead_executed` indica invocação iniciada e `tech_lead_result_available` indica
+resultado disponível. Saídas concluídas são preservadas inclusive ao atingir ou
+exceder o orçamento, antes de interromper o fluxo. Um parecer TL já recebido
+permanece em `tech_lead_verdict`, mas interrupções mantêm o status geral
+`NAO_VERIFICADO` e nunca autorizam merge ou deploy.
