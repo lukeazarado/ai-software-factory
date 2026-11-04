@@ -6,6 +6,20 @@
 <title>Minhas tarefas</title>
 <style>
 :root{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;color:#182334;background:#f4f7fb}*{box-sizing:border-box}body{margin:0;min-height:100vh;padding:clamp(20px,5vw,64px) 16px}.app{max-width:680px;margin:auto;background:#fff;border:1px solid #e4eaf1;border-radius:20px;padding:clamp(20px,5vw,40px);box-shadow:0 16px 48px #17243b12}h1{margin:0 0 8px;font-size:clamp(1.7rem,5vw,2.3rem)}.intro{margin:0 0 28px;color:#5b6878}form{display:flex;gap:10px;flex-wrap:wrap}label{display:block;font-weight:650;margin-bottom:9px}.field{flex:1 1 230px}input[type=text]{width:100%;min-height:46px;border:1px solid #aab7c8;border-radius:10px;padding:10px 13px;font:inherit}button{min-height:44px;border-radius:10px;border:1px solid transparent;padding:10px 16px;font:inherit;font-weight:650;cursor:pointer}button:focus-visible,input:focus-visible{outline:3px solid #8ac4ff;outline-offset:3px}.primary{align-self:flex-end;background:#1459bf;color:white}.primary:hover{background:#0c469c}.summary{display:flex;justify-content:space-between;gap:12px;align-items:center;margin-top:30px;padding-bottom:12px;border-bottom:1px solid #e8edf3}.summary h2{font-size:1.1rem;margin:0}.count{font-size:.9rem;color:#536478}.empty{padding:28px 8px;text-align:center;color:#687687}ul{list-style:none;padding:0;margin:0}.task{display:flex;gap:12px;align-items:center;padding:15px 0;border-bottom:1px solid #edf1f5}.task:last-child{border-bottom:0}.task input{width:20px;height:20px;flex-shrink:0;accent-color:#1459bf;cursor:pointer}.task label{margin:0;flex:1;min-width:0;overflow-wrap:anywhere;font-weight:450;cursor:pointer}.task.done label{text-decoration:line-through;color:#718094}.delete{background:#fff;color:#9b2536;border-color:#e6b5be}.delete:hover{background:#fff1f3}.error{color:#b42336;min-height:1.5em;margin:8px 0 0;font-size:.92rem}@media(max-width:420px){.primary{width:100%}.task{gap:9px}.delete{padding:9px 11px}}
+
+/* Revisão UX: legibilidade, estados e feedback sem dependências */
+:root{color-scheme:light}
+body{line-height:1.5}
+.app{box-shadow:0 12px 40px #17243b10}
+input[type=text]:hover{border-color:#64748b}
+.task{min-height:64px}
+.task:focus-within{background:#f7faff;border-radius:8px}
+.task.done{background:#f9fafb}
+.delete:focus-visible{outline-color:#9b2536}
+.count{font-variant-numeric:tabular-nums}
+.status{margin:12px 0 0;color:#385475;min-height:1.5em;font-size:.92rem}
+.empty[hidden]{display:none}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;transition:none!important}}
 </style>
 </head>
 <body>
@@ -16,7 +30,7 @@
 <div class="field"><label for="task-input">Nova tarefa</label><input id="task-input" type="text" maxlength="200" autocomplete="off" placeholder="Ex.: Revisar o projeto" aria-describedby="task-error" required></div>
 <button class="primary" type="submit">Adicionar tarefa</button>
 </form>
-<p id="task-error" class="error" role="alert" aria-live="polite"></p>
+<p id="task-error" class="error" role="alert"></p>\n<p id="task-status" class="status" role="status" aria-live="polite" aria-atomic="true"></p>
 <section aria-labelledby="task-heading">
 <div class="summary"><h2 id="task-heading">Lista de tarefas</h2><span class="count" id="task-count" aria-live="polite">0 pendentes de 0</span></div>
 <p id="empty-state" class="empty">Nenhuma tarefa ainda. Adicione a primeira!</p>
@@ -31,10 +45,10 @@ const input=document.getElementById('task-input');
 const error=document.getElementById('task-error');
 const list=document.getElementById('task-list');
 const count=document.getElementById('task-count');
-const empty=document.getElementById('empty-state');
+const empty=document.getElementById('empty-state');\nconst status=document.getElementById('task-status');
 let nextId=0;
 const tasks=[];
-function render(){
+function render(focusId=null){
 list.replaceChildren();
 for(const task of tasks){
 const item=document.createElement('li');
@@ -44,7 +58,7 @@ checkbox.type='checkbox';
 checkbox.id='task-'+task.id;
 checkbox.checked=task.done;
 checkbox.setAttribute('aria-label',(task.done?'Reabrir tarefa: ':'Concluir tarefa: ')+task.text);
-checkbox.addEventListener('change',()=>{task.done=checkbox.checked;render();});
+checkbox.addEventListener('change',()=>{task.done=checkbox.checked;status.textContent=task.done?'Tarefa concluída: '+task.text:'Tarefa reaberta: '+task.text;render(task.id);});
 const label=document.createElement('label');
 label.htmlFor=checkbox.id;
 label.textContent=task.text;
@@ -64,20 +78,20 @@ list.append(item);
 }
 const remaining=tasks.filter(task=>!task.done).length;
 count.textContent=remaining+' '+(remaining===1?'pendente':'pendentes')+' de '+tasks.length;
-empty.hidden=tasks.length>0;
+empty.hidden=tasks.length>0;\nif(focusId!==null){const target=document.getElementById('task-'+focusId);if(target)target.focus();}
 }
 form.addEventListener('submit',event=>{
 event.preventDefault();
 const text=input.value.trim();
 if(!text){
-error.textContent='Digite uma tarefa antes de adicionar.';
+error.textContent='Digite uma tarefa antes de adicionar.';\nstatus.textContent='';
 input.setAttribute('aria-invalid','true');
 input.focus();
 return;
 }
 error.textContent='';
 input.removeAttribute('aria-invalid');
-tasks.push({id:++nextId,text,done:false});
+tasks.push({id:++nextId,text,done:false});\nstatus.textContent='Tarefa adicionada: '+text;
 input.value='';
 render();
 input.focus();
