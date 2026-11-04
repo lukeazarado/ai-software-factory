@@ -35,7 +35,7 @@ export function capacityView(data, projects, { esc, fmt, name }) {
   const projectIds = projects.map(project => project.id);
   const signals = squadSignals(data, { projectIds });
   return `<section class="card"><div class="card-head"><div><h2>Conflitos de agenda por squad</h2><p>Próximos 30 dias · ${fmt(today())} como referência.</p></div><span class="badge">${signals.length} squads com atividade</span></div>
-    <p class="inline-note">A sobreposição de períodos planejados indica compromissos simultâneos para revisar. Não representa percentual de ocupação, capacidade disponível ou confirmação de conflito pela squad.</p>
+    <p class="inline-note">Só há sinal de simultaneidade quando as janelas planejadas se sobrepõem. Projetos em períodos distintos continuam visíveis, mas não contam como conflito. O quadro não representa percentual de ocupação, capacidade disponível ou confirmação de conflito pela squad.</p>
     <div class="table-wrap"><table><thead><tr><th>Cluster / squad</th><th>Projetos ativos</th><th>Janelas sobrepostas</th><th>Marcos em 30 dias</th><th>Sinal</th></tr></thead><tbody>${signals.map(item => `<tr><td><strong>${esc(name('clusters', item.clusterId))} / ${esc(name('squads', item.squadId))}</strong></td>
       <td>${item.projects.length}<span class="subtext">${item.projects.map(project => esc(project.name)).join(' · ')}</span></td><td>${item.overlaps.length}</td><td>${item.milestones.length}<span class="subtext">${item.milestones.map(milestone => `${esc(milestone.name)} · ${fmt(milestoneDate(milestone))}`).join('<br>')}</span></td>
       <td><span class="badge ${item.overlaps.length ? 'warning' : 'neutral'}">${esc(item.signal)}</span></td></tr>`).join('')}</tbody></table></div>

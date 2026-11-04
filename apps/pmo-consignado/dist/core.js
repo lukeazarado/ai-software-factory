@@ -164,7 +164,7 @@ export function squadSignals(data, { projectIds, reference = today(), horizonDay
       projects.some(project => project.id === milestone.projectId) && !milestone.done &&
       milestoneDate(milestone) >= reference && milestoneDate(milestone) <= horizonEnd);
     return { squadId: squad.id, clusterId: squad.clusterId, projects, overlaps, milestones,
-      signal: overlaps.length ? 'Sobreposição de períodos' : projects.length > 1 ? 'Projetos simultâneos' : 'Sem conflito de datas observado' };
+      signal: overlaps.length ? 'Sobreposição de períodos' : projects.length > 1 ? 'Janelas distintas' : 'Sem conflito de datas observado' };
   }).filter(item => item.projects.length || item.milestones.length);
 }
 

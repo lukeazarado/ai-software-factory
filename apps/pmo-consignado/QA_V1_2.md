@@ -8,7 +8,7 @@ Comando executado na raiz do app:
 node --test --test-reporter=spec tests/*.test.mjs
 ```
 
-**43 testes passaram; 0 falhas.** Incluem regressões V1 e V1.1, carregamento de backup antigo, validação e referências executivas, janelas sobrepostas, propagação de atraso por dependências convergentes, recorte de projetos e não mutação das datas oficiais.
+**44 testes passaram; 0 falhas.** Incluem regressões V1 e V1.1, carregamento de backup antigo, validação e referências executivas, janelas sobrepostas e sequenciais, propagação de atraso por dependências convergentes, recorte de projetos e não mutação das datas oficiais.
 
 Verificações de sintaxe executadas:
 
@@ -31,3 +31,7 @@ As três passaram sem saída de erro.
 ## Limites da evidência
 
 Não houve verificação completa em viewport móvel, automação E2E, teste de leitor de tela ou auditoria WCAG. O site conserva armazenamento local por navegador, sem sincronização. As ações manuais ocorreram apenas no preview local; não foram feitas nos dados da publicação privada.
+
+## Correção após revisão independente
+
+O TL detectou que períodos sequenciais sem sobreposição eram rotulados como simultâneos. A regra foi corrigida: apenas pares realmente sobrepostos recebem o sinal de sobreposição; múltiplos projetos sem pares sobrepostos são identificados como “Janelas distintas”. Foi adicionado teste de regressão. A classificação corrigida foi coberta por teste automatizado; não foi repetida manualmente no navegador após esse ajuste de rótulo.

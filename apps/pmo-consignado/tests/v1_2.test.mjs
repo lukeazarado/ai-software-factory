@@ -62,6 +62,18 @@ test('V1.2 squad signals describe overlapping planned windows, not a utilization
   assert.throws(() => core.squadSignals(data, { reference: '2026-11-04', horizonDays: 0 }), /Período/);
 });
 
+test('V1.2 does not label sequential project windows as simultaneous', () => {
+  const data = fixture();
+  const first = data.projects.find(project => project.id === 'p2');
+  const second = data.projects.find(project => project.id === 'p3');
+  first.start = '2026-11-04'; first.end = '2026-11-10'; first.forecast = '2026-11-10';
+  second.start = '2026-11-11'; second.end = '2026-11-20'; second.forecast = '2026-11-20';
+  const signal = core.squadSignals(data, { reference: '2026-11-04', horizonDays: 30 }).find(item => item.squadId === 's2');
+  assert.equal(signal.projects.length, 2);
+  assert.deepEqual(signal.overlaps, []);
+  assert.equal(signal.signal, 'Janelas distintas');
+});
+
 test('V1.2 delay simulation propagates the latest reachable date without mutating official forecasts', () => {
   const data = fixture();
   const before = JSON.stringify(data);
