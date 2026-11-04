@@ -26,3 +26,34 @@ nav button{font-size:13px}.primary,.secondary,.danger-button,.quiet{font-size:13
 .weekly-check{flex:none;display:grid;place-items:center;background:#e1f2e9;color:var(--success);border-radius:50%;width:28px;height:28px;font-weight:700}
 .weekly-item>div{min-width:0}
 @media(max-width:760px){.subtabs button{flex:1 1 160px}.dependency-filter{max-width:none}.weekly-highlights .card-head{padding:16px}}
+
+/* UX — tema vermelho corporativo original, inspirado na linguagem visual do setor bancário.
+   Não reproduz logotipo, marca ou elementos proprietários do Bradesco. */
+:root{--navy:#4c1021;--teal:#c91e3a;--ink:#371f29;--muted:#79666e;--line:#eadfe3;--bg:#faf6f7;--danger:#a5132e;--warning:#976019;--success:#23715b}
+.sidebar{background:linear-gradient(165deg,#7c142c 0%,#4c1021 65%,#300d1b 100%)}
+.brand-mark{color:#ffbac6}
+.brand small{color:#f4beca}
+.tribe>span:last-child,.side-bottom p{color:#e0a9b7}
+nav button{color:#f1c5cf}
+nav button:hover{background:#ffffff1c}
+nav button.active{background:#ffffff24;color:#fff;box-shadow:inset 3px 0 #ff9daf}
+.pulse{background:#ffa5b8}
+.primary{box-shadow:0 3px 8px #a5132e20}
+.primary:hover{background:#a5132e}
+.metric-icon,.org-icon{background:#fff0f2;color:#9b2440}
+.row-dot,.mini-chart .success{background:#23715b}
+.cluster-track span{background:#d96a80}
+.timeline-bar{background:#c91e3a}
+.timeline-bar.warning{background:#ba7b36}
+.timeline-bar.danger{background:#9e253d}
+.demo-banner{background:#fff2f4;border-color:#efcbd3;color:#763145}
+.demo-banner button{color:#9b2440}
+.weekly-highlights{border-color:#efcbd3}
+.weekly-highlights .card-head{background:#fff3f5}
+a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline-color:#a5132e}
+.agenda-item{display:grid;gap:8px;padding:14px 0;border-top:1px solid var(--line)}
+.agenda-item:first-child{border-top:0}
+.agenda-item .badge{justify-self:start}
+.agenda-item p{font-size:11px;margin:0;color:var(--muted)}
+.sidebar{overflow-y:auto}
+@media(max-width:760px){.agenda-item{padding:12px 0}}
