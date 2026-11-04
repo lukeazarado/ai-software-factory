@@ -98,3 +98,16 @@ test('CSV guards formula prefixes and quotes, and excludes internal notes',()=>{
   const csv=projectsCSV(data,[data.projects[0]]);
   assert.ok(csv.startsWith('\uFEFF'));assert.ok(csv.includes('"\'=1+1"'));assert.ok(!csv.includes('SECRET_NOTE_987'));assert.equal(csv.split('\r\n').length,2);
 });
+
+test('executive records roundtrip and legacy backup compatibility',()=>{
+ const d=fresh();d.issues=[{id:'i-test',projectId:'p1',name:'Fornecedor pode atrasar',type:'Risco',impact:'Alto',probability:'Média',owner:'PMO',due:core.shift(core.today(),7),mitigation:'Revisar plano de contingência',status:'Aberto'}];
+ d.decisions=[{id:'d-test',projectId:'p2',name:'Priorizar integração?',options:'Antecipar integração ou manter portal',recommendation:'Antecipar integração',owner:'Diretoria',due:core.shift(core.today(),5),status:'Pendente'}];
+ const valid=validateData(d);assert.deepEqual(valid.issues,d.issues);assert.deepEqual(valid.decisions,d.decisions);
+ const legacy=fresh();delete legacy.issues;delete legacy.decisions;const restored=validateData(legacy);assert.deepEqual(restored.issues,[]);assert.deepEqual(restored.decisions,[]);
+});
+test('executive records reject dangling project, invalid enum, date and duplicate id',()=>{
+ const base=fresh();const issue={id:'issue-x',projectId:'p1',name:'Risco',type:'Risco',impact:'Alto',probability:'Alta',owner:'PMO',due:core.today(),mitigation:'Plano',status:'Aberto'};
+ for(const mutate of [x=>x.projectId='missing',x=>x.type='Outro',x=>x.due='2026-02-30',x=>x.id=base.projects[0].id]){
+  const d=fresh();const item={...issue};mutate(item);d.issues=[item];assert.throws(()=>validateData(d));
+ }
+});
