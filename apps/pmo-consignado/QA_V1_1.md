@@ -26,6 +26,15 @@ Comando: `node --test tests/*.test.mjs` a partir desta pasta.
 
 Não foram encontrados bloqueadores adicionais no material efetivamente testado.
 
-## Limites
+## Verificação do orquestrador no navegador
+
+- Selecionar Plataforma na organização restringiu os cards a Plataforma; uma estrutura de QA sem projetos continuou localizável. Busca originacao encontrou Originação, com busca organizacional separada da busca de projetos.
+- Busca digitada por elegibilidade (fornecedor) e consulta (consumidor) restringiu a lista a um vínculo; o foco permaneceu em milestone-search durante a digitação.
+- Subvisões do cronograma foram abertas e os marcadores de planejado, previsão e real foram inspecionados visualmente. Botão da subvisão manteve foco.
+- Conquistas semanais exibiu a conclusão real do exemplo na semana 02–08/11/2026. Selecionar o domingo normalizou para a segunda da mesma semana. Agrupar por cluster exibiu Plataforma.
+- Semana anterior mostrou intervalo 26/10–01/11/2026 e zero conclusões, mantendo foco no botão. A mesma semana permaneceu no painel e no relatório gerado.
+- Relatório do painel declarou a busca de marco como não aplicada nessa visão, incluiu as dependências completas e omitiu a observação interna do exemplo.
+
+## Limites de verificação
 
 Os testes de integração executam o código real de `app.js` em Node VM com DOM/armazenamento mínimos simulados. O fixture reproduz seleção de opções apenas para verificar coerência de filtros; ele não substitui navegador real. Esta evidência não comprova layout, foco/cursor de busca, semântica de teclado, diálogos nativos, impressão/PDF renderizado ou download físico. O orquestrador conduz essas verificações no navegador; a homologação final é do usuário.
