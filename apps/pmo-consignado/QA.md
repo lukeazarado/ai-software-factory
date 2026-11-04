@@ -23,4 +23,13 @@ Comando reproduzível: `node --test tests/*.test.mjs` a partir desta pasta. Resu
 
 - **ALTA — Recuperação de backup:** o limite inicial de importação (2 MiB) era menor que backups exportáveis válidos. Reprodução independente: 500 projetos válidos com notas de 3.000 caracteres e objetivo de 1.000 caracteres produziram JSON indentado de 2.192.924 bytes, superior a 2.097.152 bytes. TL confirmou com outra fixture. Correção verificada: teto comum de 32 MiB para importação e backup; guarda antes de salvar; teste de ida/volta de 500 projetos acima do limite antigo restaura todos os dados. Arquivo com teto + 1 byte é recusado sem leitura nem alteração de estado.
 
-Validação de interface permanece com o orquestrador e homologação com o usuário.
+## Verificação real no navegador pelo orquestrador
+
+- Projeto criado com cluster/squad e preservado após recarregar; Sem marcos exibido corretamente.
+- Mapa mostra organizações do fornecedor e consumidor; tentativa de ciclo transitivo foi recusada mantendo os campos.
+- Cluster e squad de QA criados; exclusão do cluster com squad foi bloqueada e mensagem recebeu foco.
+- Marco concluído sem data real foi bloqueado; após informar a data, foi salvo e exibido como concluído.
+- Escape fecha o diálogo; erros customizados observados receberam foco.
+- Relatório padrão foi gerado no DOM sem a nota interna sentinela; imprimir/PDF visual e layout estreito ainda não verificados.
+
+Homologação permanece com o usuário.

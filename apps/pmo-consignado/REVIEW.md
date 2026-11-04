@@ -1,6 +1,16 @@
 # Tech Lead — PMO Consignado, bloco 1
 
-Revisão independente em andamento. Não representa aprovação de merge ou publicação pública.
+## Parecer final do bloco 1
+
+**VEREDITO: APROVADO para homologação privada**, no escopo e nas evidências delimitados abaixo. Não autoriza merge nem publicação pública.
+
+PR revisado: https://github.com/lukeazarado/ai-software-factory/pull/14 (draft). Head executável **`66209fec22acfcddfdb024a76642092ead758726`**, base **`92ffad4b580458dcb91d404850bec2ae38fda007`**. Doze arquivos adicionados; nenhum arquivo anterior alterado ou removido. Nenhum bloqueador remanescente identificado. Os achados médios de saúde/modelo/acessibilidade e o achado alto de recuperação foram corrigidos e verificados.
+
+Evidências finais: inspeção dos arquivos/diff reais via GitHub; hashes de blobs de todo o código e testes iguais aos arquivos locais inspecionados; **24/24 testes executados novamente pelo TL**, sem falhas. CI remoto do PMO e da Agenda concluído com sucesso para o mesmo head, verificado por API. Não se atribui resultado de agente automático de IA a essas evidências.
+
+Riscos e limites residuais: armazenamento por navegador/origem, sem sincronização; necessidade de backups; impressão/PDF renderizado, download físico e cobertura completa de dispositivos/leitores de tela não verificados. A validação de navegador cobriu fluxos amostrados, não todo CRUD/E2E nem conformidade WCAG. O aplicativo não calcula caminho crítico nem remarca datas automaticamente. Homologação do usuário e decisão humana de merge permanecem pendentes.
+
+As seções seguintes preservam o histórico factual de achados e decisões por ciclo; vereditos intermediários não substituem este parecer final.
 
 ## Material e evidências
 
@@ -78,3 +88,28 @@ Correção inspecionada: `MAX_BACKUP_BYTES` define 32 MiB e `backupJSON` valida/
 QA independente confirmou regressão com 500 projetos e backup acima de 2 MiB: o handler real de importação restaura todos os projetos e o resultado é igual ao normalizado. Um arquivo de 32 MiB + 1 byte é recusado antes da leitura. Suíte atual: **24/24 testes aprovados**.
 
 Veredito do ciclo 4 após correção: **APROVADO**. O achado de recuperação está resolvido no código efetivamente inspecionado e na evidência QA. Segue pendente a revisão do diff real do PR no ciclo 5.
+
+## Ciclo 5 — diff real, regressão e parecer final
+
+Obtive a lista e os patches reais de `/pulls/14/files?per_page=100`: 12 arquivos novos, sem remoções. O retorno inicial exibido foi longo; para evitar inferir conteúdo omitido da saída, conferi a presença/completude dos patches por arquivo, revisei o workflow separadamente e comparei os hashes de blob dos quatro arquivos executáveis e dos dois arquivos de testes com os arquivos locais já inspecionados. Todos coincidem. Docs de plano/QA/ciclos/README foram lidos; este relatório é atualizado após a revisão e pode receber commit apenas documental posterior ao head avaliado.
+
+O workflow `.github/workflows/pmo-tests.yml` usa eventos PR para `main` com filtros restritos ao aplicativo/workflow e despacho manual; token `contents: read`, Node 22, limite de cinco minutos, sintaxe e testes sem dependências externas. Não contém credenciais, publicação, merge nem permissões de gravação. O código do aplicativo e os testes ficam isolados em `apps/pmo-consignado/`; a alteração não modifica o runner nem os outros produtos.
+
+Checklist final:
+
+- **Escopo/correção:** organização, projetos, marcos, DAG, cronograma, saúde, risco e exportação inspecionados; achados de lógica corrigidos.
+- **Arquitetura:** aplicação estática individual, núcleo separado da interface, sem bibliotecas/serviços externos; proporcional ao MVP.
+- **Segurança/dados:** schema e referências validados; conteúdo escapado; fórmulas CSV neutralizadas; notas internas excluídas por padrão; gravação/importação preservam estado anterior em falha; recuperação acima de 2 MiB retestada.
+- **Testes:** executei `node --test tests/*.test.mjs`: 24 testes aprovados, zero falhas. Core e handlers reais em VM; limites de simulação documentados no QA.
+- **Operação/regressão:** README explica execução HTTP, vínculo dos dados à origem, backup e limites de impressão. CI PMO e Agenda passam no head avaliado. Voltar a versão do código não substitui backup dos dados locais; guardar JSON antes de atualizações/importações.
+
+Evidência adicional de navegador comunicada pelo orquestrador: cluster e squad criados; tentativa de exclusão de cluster com squad recusada com mensagem e foco no erro; relatório padrão sem nota interna sentinela; cronograma aberto; criação de marco concluído sem data real recusada com foco no erro e, após informar a data, gravação com estado Concluído observada. Nenhuma alegação de PDF renderizado foi feita.
+
+CI confirmado:
+
+- PMO Consignado — testes: https://github.com/lukeazarado/ai-software-factory/actions/runs/41845815794 — `completed / success` no head `66209fec22acfcddfdb024a76642092ead758726`.
+- Agenda do Atleta: https://github.com/lukeazarado/ai-software-factory/actions/runs/41845815697 — `completed / success` no mesmo head.
+
+**Bloqueadores: nenhum remanescente no material analisado.** Melhorias futuras opcionais: ampliar cobertura real de teclado/dispositivos e validar PDF visualmente com o relatório que será apresentado à diretoria. Não são alegações de verificações já realizadas.
+
+**VEREDITO: APROVADO para homologação privada.** O usuário permanece responsável pela homologação e autorização humana de merge. Não foi publicada revisão formal ou aprovação do PR pelo TL.

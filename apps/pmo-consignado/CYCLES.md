@@ -34,4 +34,12 @@ Autorização: até 15 ciclos, com checkpoint humano a cada 5. Este bloco execut
 - QA navegador: cluster e squad criados; tentativa de excluir cluster com squad foi impedida com mensagem e foco no erro. Relatório padrão não contém nota interna sentinela.
 - TL independente: APROVADO no escopo verificado; aguarda diff real no ciclo 5.
 
-O ciclo 5 será registrado após revisão do PR e regressão final.
+## Ciclo 5 — revisão real de PR e regressão final
+
+- PO: recorte do bloco1 atendido para homologação individual; próximos blocos dependem do checkpoint humano.
+- Entrega: PR #14, branch feat/pmo-consignado-mvp. Código revisado no SHA 66209fec22acfcddfdb024a76642092ead758726, base 92ffad4b580458dcb91d404850bec2ae38fda007. Este fechamento documental não modifica código executável.
+- QA: 24/24 testes reexecutados pelo orquestrador e TL; sintaxe de app.js/core.js verificada com node --check. Navegador confirmou marco concluído exige data real, preserva campos no erro e salva após correção.
+- CI GitHub confirmado: PMO41845815794 e Agenda41845815697 concluídos com success no SHA de código acima.
+- TL independente: diff real dos12 arquivos, conteúdo executável/testes comparado ao material local, workflow lido; APROVADO para homologação privada. Sem bloqueadores remanescentes no escopo verificado.
+- Limites: PDF renderizado, layout estreito e todos os caminhos CRUD não foram integralmente exercitados; sem auditoria WCAG completa. Armazenamento local sem sincronização entre dispositivos; impactos potenciais sem reagendamento automático.
+- Próxima aprovação: feedback do usuário no checkpoint5 antes dos ciclos6–10. Nenhum merge ou acesso público autorizado/executado nesta rodada.
