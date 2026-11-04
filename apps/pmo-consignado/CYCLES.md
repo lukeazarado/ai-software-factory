@@ -78,7 +78,7 @@ Autorização: o usuário pediu mais cinco rodadas e uma exploração da identid
 - Dev: versão visual V1.2; testes de armazenamento V1/V1.1 ajustados para incluir o novo módulo executivo; relatório inclui riscos/decisões aplicáveis sem observações internas por padrão.
 - QA local inicial: 43 aprovados; revisão independente sinalizou classificação indevida de períodos sequenciais como simultâneos. Correção registrada abaixo.
 - Navegador: preview local confirmou fluxo de cadastro/edição de risco e decisão, persistência após recarregar, tipo impedimento, matriz de squads, simulação com dependências transitivas e ausência de alteração às datas oficiais. O modal do relatório foi aberto; a renderização visual/PDF ainda não foi confirmada.
-- TL independente inicial no diff real do PR #16: AJUSTES_OBRIGATORIOS por rótulo falso de simultaneidade em períodos não sobrepostos. Correção e teste adicionados; revisão final do novo SHA pendente.
+- TL independente: o achado do diff inicial foi corrigido; revisão do SHA `8481b7922bddf84a678f9c3c1bfc7a0801e3e653` confirmou a correção e não encontrou novos bloqueadores. APROVADO para homologação privada.
 - QA automatizado atualizado: `node --test --test-reporter=spec tests/*.test.mjs` — 44 aprovados, 0 falhas; `node --check` de `app.js`, `core.js` e `executive.js` passou.
-- CI no SHA inicial do PR: PMO success; workflow Agenda também concluiu success. Reexecutar para o novo SHA.
+- CI no SHA atualizado do PR: PMO `41891834670` e Agenda `41891834754`, ambos success.
 - Próxima aprovação: feedback humano neste checkpoint de cinco ciclos. Sem merge; site deve continuar privado.
