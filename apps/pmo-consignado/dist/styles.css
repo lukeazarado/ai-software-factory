@@ -10,3 +10,19 @@ nav button{font-size:13px}.primary,.secondary,.danger-button,.quiet{font-size:13
 #save-state{max-width:190px;line-height:1.4;letter-spacing:0}
 @media(max-width:760px){.topbar{height:auto;min-height:68px;gap:12px;flex-wrap:wrap;padding:14px 18px}.topbar>div{gap:8px;flex-wrap:wrap}.filters .search{flex:1 0 100%;min-width:0}.filters select{flex:1 1 145px;max-width:none;min-height:44px}.filters #clear-filters{min-height:44px}.head-actions{flex-wrap:wrap}.head-actions button{min-height:44px}.filter-heading{align-items:flex-start;flex-direction:column;gap:3px}}
 @media(max-width:420px){.filters select{flex-basis:100%}.topbar #save-state{max-width:100%}}
+
+/* PMO v1.1 — consultas de marcos, dependências e resultados semanais */
+.subtabs{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 18px}
+.subtabs button{min-height:42px;border:1px solid var(--line);border-radius:8px;padding:10px 16px;background:#fff;color:var(--ink);font-weight:600}
+.subtabs button.active{background:var(--teal);color:#fff;border-color:var(--teal)}
+.dependency-filter{display:grid;gap:7px;font-size:12px;font-weight:650;max-width:480px;margin-bottom:12px}
+.dependency-filter input{border:1px solid var(--line);border-radius:8px;padding:12px;min-height:44px;width:100%;background:#fff;color:var(--ink)}
+.timeline-marker{position:absolute;top:5px;width:15px;height:15px;border-radius:50%;transform:translateX(-50%);background:#8297a4;border:2px solid #fff;box-shadow:0 0 0 2px #8297a4}
+.timeline-marker.success{background:var(--success);box-shadow:0 0 0 2px var(--success)}
+.timeline-marker.danger{background:var(--danger);box-shadow:0 0 0 2px var(--danger)}
+.weekly-highlights{border-color:#bcded2}
+.weekly-highlights .card-head{background:#f3faf6}
+.weekly-item{display:flex;align-items:flex-start;gap:12px;padding:12px 0;border-top:1px solid var(--line)}
+.weekly-check{flex:none;display:grid;place-items:center;background:#e1f2e9;color:var(--success);border-radius:50%;width:28px;height:28px;font-weight:700}
+.weekly-item>div{min-width:0}
+@media(max-width:760px){.subtabs button{flex:1 1 160px}.dependency-filter{max-width:none}.weekly-highlights .card-head{padding:16px}}
