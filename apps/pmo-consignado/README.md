@@ -1,6 +1,8 @@
-# Órbita — PMO Consignado v1.0
+# Órbita — PMO Consignado v1.1
 
 Portal individual da tribo de Consignado: clusters, squads, projetos, marcos e dependências entre entregas. Aplicação estática sem serviços externos. Dados demonstrativos são fictícios.
+
+Na V1.1, os filtros de estrutura respeitam cluster/squad/busca, as dependências têm pesquisa por marco e o cronograma separa Projetos, Marcos e entregas e Conquistas semanais. As conclusões da semana usam exclusivamente a data real, de segunda a domingo, e também aparecem no relatório executivo. Detalhes em `V1_1.md`, `QA_V1_1.md` e `REVIEW_V1_1.md`. Esta manutenção precede os ciclos 6–10.
 
 ## Executar
 
