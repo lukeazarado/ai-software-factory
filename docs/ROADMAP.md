@@ -12,6 +12,13 @@
 - Comando opcional `python -m factory.tech_lead` lê diffs via GitHub API (somente leitura) e gera relatório por PR/SHA.
 - Atualização das instruções do ChatGPT e AGENTS.md; testes de regressão sem chamadas de API.
 
+## Factory 2.2 — UX e consenso de design
+- UX Designer opcional no runner, em conjunto com o Arquiteto.
+- Até duas rodadas de convergência com marcador explícito `CONSENSO_DESIGN`.
+- Product Owner arbitra divergências persistentes.
+- Tech Lead continua independente e posterior ao QA.
+- UX Designer segue contrato de evidências, hipóteses, estados, Nielsen, WCAG 2.2 AA, critérios de aceite e plano de teste.
+
 ## Próximas etapas (não incluídas neste PR)
 - Revisão TL disparada automaticamente por eventos de PR no GitHub Actions, com custos aprovados, limites e segredos protegidos.
 - Checks obrigatórios de CI/branch protection; regras de aprovação humana e segregação de funções.
