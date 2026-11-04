@@ -17,7 +17,8 @@
 <div class="field"><label for="task-input">Nova tarefa</label><input id="task-input" type="text" maxlength="200" autocomplete="off" placeholder="Ex.: Revisar o projeto" aria-describedby="task-error" required></div>
 <button class="primary" type="submit">Adicionar tarefa</button>
 </form>
-<p id="task-error" class="error" role="alert"></p>\n<p id="task-status" class="status" role="status" aria-live="polite" aria-atomic="true"></p>
+<p id="task-error" class="error" role="alert"></p>
+<p id="task-status" class="status" role="status" aria-live="polite" aria-atomic="true"></p>
 <section aria-labelledby="task-heading">
 <div class="summary"><h2 id="task-heading">Lista de tarefas</h2><span class="count" id="task-count" aria-live="polite">0 pendentes de 0</span></div>
 <p id="empty-state" class="empty">Nenhuma tarefa ainda. Adicione a primeira!</p>
@@ -32,7 +33,8 @@ const input=document.getElementById('task-input');
 const error=document.getElementById('task-error');
 const list=document.getElementById('task-list');
 const count=document.getElementById('task-count');
-const empty=document.getElementById('empty-state');\nconst status=document.getElementById('task-status');
+const empty=document.getElementById('empty-state');
+const status=document.getElementById('task-status');
 let nextId=0;
 const tasks=[];
 function render(focusId=null){
@@ -65,20 +67,23 @@ list.append(item);
 }
 const remaining=tasks.filter(task=>!task.done).length;
 count.textContent=remaining+' '+(remaining===1?'pendente':'pendentes')+' de '+tasks.length;
-empty.hidden=tasks.length>0;\nif(focusId!==null){const target=document.getElementById('task-'+focusId);if(target)target.focus();}
+empty.hidden=tasks.length>0;
+if(focusId!==null){const target=document.getElementById('task-'+focusId);if(target)target.focus();}
 }
 form.addEventListener('submit',event=>{
 event.preventDefault();
 const text=input.value.trim();
 if(!text){
-error.textContent='Digite uma tarefa antes de adicionar.';\nstatus.textContent='';
+error.textContent='Digite uma tarefa antes de adicionar.';
+status.textContent='';
 input.setAttribute('aria-invalid','true');
 input.focus();
 return;
 }
 error.textContent='';
 input.removeAttribute('aria-invalid');
-tasks.push({id:++nextId,text,done:false});\nstatus.textContent='Tarefa adicionada: '+text;
+tasks.push({id:++nextId,text,done:false});
+status.textContent='Tarefa adicionada: '+text;
 input.value='';
 render();
 input.focus();
