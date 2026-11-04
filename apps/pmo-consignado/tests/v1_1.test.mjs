@@ -88,7 +88,8 @@ test('V1 backups retain schema version and legacy missing actual without fabrica
   assert.equal(c.weeklyDeliveries(restored,{reference:'2024-02-29'}).missingActual,6);
 });
 
-const appSource=(await readFile(new URL('../dist/app.js',import.meta.url),'utf8')).replace(/^import[^\n]*\n/,'');
+const appSource=(await readFile(new URL('../dist/app.js',import.meta.url),'utf8')).replace(/^import[^\n]*\n/gm,'');
+const executiveSource=(await readFile(new URL('../dist/executive.js',import.meta.url),'utf8')).replace(/^import[^\n]*\n/,'').replace(/^export /gm,'');
 function boot(data=fixture()){
   const nodes=new Map(),events={},papers=[];
   function node(id){
@@ -99,7 +100,7 @@ function boot(data=fixture()){
     nodes.set(id,el);return el;
   }
   const context=vm.createContext({...c,structuredClone,console,Map,Set,Date,JSON,Error,Blob,URL,setTimeout:()=>1,clearTimeout(){},confirm:()=>true,window:{print(){}},document:{getElementById:node,querySelectorAll:()=>[],querySelector:()=>null,createElement:()=>({innerHTML:'',className:''}),body:{append:paper=>papers.push(paper)},addEventListener(type,fn){(events[type]||=[]).push(fn);}},localStorage:{getItem(key){assert.equal(key,'orbita-pmo-v1');return JSON.stringify(data);},setItem(){}}});
-  vm.runInContext(appSource+'\nglobalThis.QA={go,render,selected,week:()=>selectedWeek,timeline:()=>timelineView};',context);
+  vm.runInContext(executiveSource+'\n'+appSource+'\nglobalThis.QA={go,render,selected,week:()=>selectedWeek,timeline:()=>timelineView};',context);
   const change=(id,value)=>{node(id).value=value;for(const fn of events.change||[])fn({target:node(id)});};
   const click=(selector,dataset={})=>{const target={closest:s=>s===selector?{dataset}:null};for(const fn of events.click||[])fn({target});};
   return {context,nodes,papers,node,change,click};

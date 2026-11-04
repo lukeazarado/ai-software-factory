@@ -43,3 +43,40 @@ Autorização: até 15 ciclos, com checkpoint humano a cada 5. Este bloco execut
 - TL independente: diff real dos12 arquivos, conteúdo executável/testes comparado ao material local, workflow lido; APROVADO para homologação privada. Sem bloqueadores remanescentes no escopo verificado.
 - Limites: PDF renderizado, layout estreito e todos os caminhos CRUD não foram integralmente exercitados; sem auditoria WCAG completa. Armazenamento local sem sincronização entre dispositivos; impactos potenciais sem reagendamento automático.
 - Próxima aprovação: feedback do usuário no checkpoint5 antes dos ciclos6–10. Nenhum merge ou acesso público autorizado/executado nesta rodada.
+
+## Bloco 2 — ciclos 6–10 (V1.2)
+
+Autorização: o usuário pediu mais cinco rodadas e uma exploração da identidade visual/UX do Bradesco. O bloco fecha com checkpoint humano. Não são chamadas ao runner nem cinco execuções de API.
+
+## Ciclo 6 — riscos, impedimentos e decisões
+
+- PO: registrar riscos potenciais separados de impedimentos ativos; decisões com pergunta, opções, recomendação, responsável e data limite.
+- Dev: registros vinculados a projeto, com validação, ações para criar/editar/excluir e resumo para pauta executiva. Probabilidade não é solicitada para impedimento ativo.
+- Dados legados: os campos `issues` e `decisions` são opcionais no backup V1 e inicializados vazios ao carregar legado; não há migração destrutiva.
+
+## Ciclo 7 — sinais de conflitos por squad
+
+- Arquitetura: não inferir capacidade percentual sem disponibilidade/dedicação cadastradas.
+- Dev: matriz de compromissos com projetos ativos na janela dos próximos 30 dias, marcos próximos e pares de projetos cujas janelas planejadas se sobrepõem.
+- Limite explícito na interface: sinaliza concentração/conflito; não calcula utilização nem disponibilidade real.
+
+## Ciclo 8 — simulação de atraso
+
+- PO/Arquitetura: simular uma data de previsão para um marco pendente e propagar pelas dependências alcançáveis, preservando datas oficiais.
+- Dev: propagação em DAG; em caminhos convergentes prevalece a data mais tardia entre pré-requisitos; concluídos não são reprogramados; filtro visual mantém o recorte de projetos sem cortar a propagação transitiva.
+- Testes verificam a saída da simulação e a não mutação do grafo/datas oficiais.
+
+## Ciclo 9 — exploração de identidade visual e UX
+
+- Referência solicitada: página inicial oficial Bradesco (`https://banco.bradesco/html/classic/index.shtm`), inspecionada no navegador.
+- Decisão: usar vermelho/crimson, bordô e neutros brancos/cinzas em hierarquia própria de produto PMO. Não copiar marca, logotipo, banners ou padrões de autenticação financeira.
+- Hierarquia aplicada para navegação e ações; severidade de risco continua com sinalização semântica distinta. Foco de teclado usa contorno visível e cores com contraste reforçado.
+- Limite: inspiração visual avaliada, não uma auditoria WCAG ou teste formal com usuários.
+
+## Ciclo 10 — regressão, integração e preparação para homologação
+
+- Dev: versão visual V1.2; testes de armazenamento V1/V1.1 ajustados para incluir o novo módulo executivo; relatório inclui riscos/decisões aplicáveis sem observações internas por padrão.
+- QA local: `node --test --test-reporter=spec tests/*.test.mjs` — 43 aprovados, 0 falhas; `node --check` de `app.js`, `core.js` e `executive.js` passou.
+- Navegador: preview local confirmou fluxo de cadastro/edição de risco e decisão, persistência após recarregar, tipo impedimento, matriz de squads, simulação com dependências transitivas e ausência de alteração às datas oficiais. O modal do relatório foi aberto; a renderização visual/PDF ainda não foi confirmada.
+- TL independente e CI: registrar após revisão do diff real do PR. Não afirmar aprovação antecipada.
+- Próxima aprovação: feedback humano neste checkpoint de cinco ciclos. Sem merge; site deve continuar privado.
