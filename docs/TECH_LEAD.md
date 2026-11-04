@@ -55,4 +55,4 @@ Todo PR direcionado à `main` aciona CI de testes com token somente leitura. Ap�
 Detalhes e configuração: [Automação de Pull Requests](PR_AUTOMATION.md). Isso **não** configura merge automático, aprovação formal no GitHub, deploy ou branch protection.
 
 ## Limites do MVP
-O pipeline `factory.runner` contém cinco agentes sequenciais e registra o parecer de Tech Lead no relatório local; esse runner **não cria PRs**. O GitHub Actions agora integra testes em PRs e relatório TL após CI, sem execução paga até opt-in. Não há branch protection obrigatória configurada, autorização de merge automático nem deploy automático.
+O pipeline `factory.runner` contém cinco agentes por padrão e pode incluir o UX Designer com `--enable-ux`; registra o parecer de Tech Lead no relatório local. O UX participa apenas do desenho, antes da implementação, e o TL permanece independente. Esse runner **não cria PRs**. O GitHub Actions agora integra testes em PRs e relatório TL após CI, sem execução paga até opt-in. Não há branch protection obrigatória configurada, autorização de merge automático nem deploy automático.

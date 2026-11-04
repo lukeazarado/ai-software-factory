@@ -5,7 +5,7 @@ import sys
 import types
 
 import pytest
-from factory.runner import execute, parse_qa_result
+from factory.runner import execute, load_ux_skill, parse_qa_result, parse_design_consensus
 from factory.tech_lead import gate_status
 
 
@@ -126,6 +126,77 @@ def test_qa_parser(text, expected):
                                         ('NAO_VERIFICADO', 'NAO_VERIFICADO')])
 def test_lead_cannot_override_qa(qa, expected):
     assert gate_status('APROVADO', 'PASSOU: básico', qa) == expected
+
+
+@pytest.mark.parametrize('text,expected', [
+    ('CONSENSO_DESIGN: SIM', 'SIM'),
+    ('CONSENSO_DESIGN: NAO', 'NAO'),
+    ('proposta sem marcador', 'NAO_VERIFICADO'),
+    ('CONSENSO_DESIGN: SIM\nCONSENSO_DESIGN: NAO', 'NAO_VERIFICADO'),
+])
+def test_design_consensus_parser(text, expected):
+    assert parse_design_consensus(text) == expected
+
+
+def test_versioned_ux_skill_is_loaded():
+    skill = load_ux_skill()
+    assert 'UX Designer Sênior' in skill
+    assert 'WCAG 2.2' in skill
+    assert 'CONSENSO_DESIGN' not in skill
+
+
+def test_ux_converges_with_architect_before_development(tmp_path, monkeypatch):
+    calls, tasks = [], []
+    counters = {'Arquiteto Web': 0, 'UX Designer': 0}
+
+    class Agent:
+        def __init__(self, name, model, instructions, tools=None):
+            self.name, self.tools = name, tools or []
+
+    class Runner:
+        @staticmethod
+        async def run(agent, task, max_turns):
+            calls.append(agent.name)
+            tasks.append(task)
+            agent.model_settings.max_tokens
+            if agent.name in counters:
+                counters[agent.name] += 1
+            if agent.name == 'Arquiteto Web':
+                output = f'layout tecnico {counters[agent.name]}\nCONSENSO_DESIGN: ' + ('NAO' if counters[agent.name] == 1 else 'SIM')
+            elif agent.name == 'UX Designer':
+                output = f'layout visual {counters[agent.name]}\nCONSENSO_DESIGN: ' + ('NAO' if counters[agent.name] == 1 else 'SIM')
+            elif agent.name == 'Desenvolvedor Full Stack':
+                next(t for t in agent.tools if t.__name__ == 'write_file')(
+                    'index.html', '<html><title>X</title><meta name="viewport"></html>')
+                output = 'implementado'
+            elif agent.name == 'QA':
+                output = 'ok\nRESULTADO_QA: PASSOU'
+            elif agent.name == 'Tech Lead':
+                output = 'VEREDITO: APROVADO'
+            else:
+                output = 'requisitos'
+            return types.SimpleNamespace(final_output=output,
+                context_wrapper=types.SimpleNamespace(usage=types.SimpleNamespace(total_tokens=1)))
+
+    monkeypatch.setitem(sys.modules, 'agents', types.SimpleNamespace(
+        Agent=Agent, Runner=Runner, ModelSettings=types.SimpleNamespace, function_tool=lambda f: f))
+    report = run(tmp_path, enable_ux=True, token_budget=1000)
+    assert calls == ['Product Owner', 'Arquiteto Web', 'UX Designer',
+                     'Arquiteto Web', 'UX Designer', 'Desenvolvedor Full Stack', 'QA', 'Tech Lead']
+    assert report['ux_enabled'] is True
+    assert report['design_decision'] == 'CONSENSO_ARQUITETO_UX'
+    assert len(report['design_rounds']) == 1
+    assert 'Proposta UX' in tasks[3]
+
+
+def test_po_arbitrates_when_design_does_not_converge(tmp_path, monkeypatch):
+    calls, tasks, _ = install_sdk(monkeypatch)
+    report = run(tmp_path, enable_ux=True, max_design_rounds=2, token_budget=1000)
+    assert report['design_decision'] == 'ARBITRAGEM_PO'
+    assert report['po_arbitration'] == 'implementado'
+    assert len(report['design_rounds']) == 2
+    assert calls.count('UX Designer') == 3
+    assert any('Arbitre a divergência' in task for task in tasks)
 
 
 @pytest.mark.parametrize('limits', [{'max_turns': 0}, {'timeout_seconds': float('inf')},

@@ -4,9 +4,10 @@ Fábrica de software multiagente com **ChatGPT como interface principal**, **Git
 
 ## Arquitetura da squad
 
-**ChatGPT / CTO Orquestrador → Product Owner → Arquiteto → Desenvolvedor → QA → Tech Lead → revisão humana de PR → merge autorizado.**
+**ChatGPT / CTO Orquestrador → Product Owner → (Arquiteto ↔ UX) → Desenvolvedor → QA → Tech Lead → revisão humana de PR → merge autorizado.**
 
 - Product Owner define critérios de aceite; Arquiteto desenha a solução mínima; Desenvolvedor escreve arquivos reais.
+- UX Designer define a interface gráfica em conjunto com o Arquiteto; após duas rodadas sem consenso, o Product Owner arbitra a direção.
 - QA verifica testes e comportamento; **Tech Lead** revisa arquitetura, segurança, correção, regressão e qualidade, distinguindo bloqueadores de melhorias opcionais.
 - O TL emite `APROVADO`, `AJUSTES_OBRIGATORIOS` ou `NAO_VERIFICADO`, mas **não faz merge, deploy ou aprova PR automaticamente**.
 - `docs/TECH_LEAD.md` detalha checklist, severidade e regras de revisão.
@@ -17,7 +18,7 @@ Após o merge deste PR, abra o projeto **AI Software Factory** no ChatGPT e subs
 
 Você pode pedir na conversa: **“CTO, ative o Tech Lead e revise o PR #N do repositório lukeazarado/ai-software-factory, com checklist e parecer antes do merge.”** A revisão em conversa usa o conector GitHub, quando disponível, mas não representa execução independente ou contínua do SDK.
 
-## 2. Executor local de cinco agentes (opcional, consome API)
+## 2. Executor local da squad (opcional, consome API)
 
 Requer Python 3.11+, API OpenAI configurada no ambiente e cobranças aplicáveis. **Nunca envie chaves pelo chat.**
 
@@ -29,7 +30,13 @@ python -m pip install -r requirements.txt
 python -m factory.runner --project meu-portal --prompt "Crie um gerenciador de tarefas responsivo"
 ```
 
-O runner sequencial chama **cinco agentes** (incluindo TL), grava arquivos sob `workspace/projects/` e relatório em `workspace/reports/` com veredito técnico. Ele não faz commit/PR/deploy sozinho.
+O runner sequencial chama cinco agentes por padrão (incluindo TL). Com `--enable-ux`, adiciona o UX Designer e registra até duas rodadas de acordo com o Arquiteto; sem consenso, o PO decide. Grava arquivos sob `workspace/projects/` e relatório em `workspace/reports/` com veredito técnico. Ele não faz commit/PR/deploy sozinho.
+
+Para ativar a nova pessoa sem alterar o fluxo padrão:
+
+```bash
+python -m factory.runner --project meu-portal --prompt "Crie um portal" --enable-ux
+```
 
 ## 3. Revisar um Pull Request real via comando (opcional)
 
