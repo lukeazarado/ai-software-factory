@@ -10,6 +10,7 @@ import json
 import os
 from pathlib import Path
 import re
+from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 from .tech_lead import github_json
@@ -90,6 +91,32 @@ def format_review(run: dict, verdict: str, details: str) -> str:
             + details)
 
 
+def classify_review_failure(exc: Exception) -> tuple[str, str]:
+    """Return a safe diagnostic category; never expose raw exception messages.
+
+    SDK/API exception text may contain request details or sensitive data.
+    Only fixed messages and numeric HTTP statuses are used.
+    """
+    status = getattr(exc, 'status_code', None)
+    if isinstance(exc, HTTPError):
+        status = exc.code
+    if isinstance(status, int):
+        if status in (401, 403):
+            return 'AUTH_OR_PERMISSION', 'Falha de autenticação ou permissão da API.'
+        if status == 429:
+            return 'RATE_OR_QUOTA', 'Limite de requisições ou cota da API atingido.'
+        if status in (408, 504) or status >= 500:
+            return 'API_UNAVAILABLE', 'API indisponível ou requisição expirada.'
+        if status == 400:
+            return 'INVALID_REQUEST', 'A API rejeitou os parâmetros da solicitação.'
+    name = type(exc).__name__.lower()
+    if isinstance(exc, (TimeoutError, ConnectionError, URLError)) or 'timeout' in name or 'connection' in name:
+        return 'NETWORK_OR_TIMEOUT', 'Falha de rede ou tempo limite da API.'
+    if isinstance(exc, (ValueError, RuntimeError)):
+        return 'REVIEW_PROCESS', 'Falha de validação ou processamento da revisão.'
+    return 'UNEXPECTED', 'Falha inesperada na revisão automática.'
+
+
 def execute(event: dict, repo: str, token: str, ai_enabled: bool, model: str,
             output: Path) -> dict | None:
     selected = valid_target(event, repo, token)
@@ -99,6 +126,7 @@ def execute(event: dict, repo: str, token: str, ai_enabled: bool, model: str,
     number = pr['number']
     status = run.get('conclusion')
     verdict = 'NAO_VERIFICADO'
+    failure_category = None
     details = ('A revisão por IA está **desabilitada**; somente a execução do QA foi '
                'verificada automaticamente. Requer revisão humana do diff. Para ativar '
                'a análise semântica, configure o secret `OPENAI_API_KEY` e a variável '
@@ -116,11 +144,13 @@ def execute(event: dict, repo: str, token: str, ai_enabled: bool, model: str,
                 raise RuntimeError('O HEAD do PR mudou durante a revisão')
             verdict = report['verdict']
             details = '### Revisão do diff pelo agente\n\n' + report['tech_lead'][:30000]
-        except Exception:
+        except Exception as exc:
             verdict = 'NAO_VERIFICADO'
-            details = ('A revisão automática não pôde ser concluída. '
-                       'Verifique as dependências, o acesso e os logs do workflow; '
-                       'não interprete este resultado como aprovação.')
+            failure_category, safe_message = classify_review_failure(exc)
+            print(f'Tech Lead: falha classificada como {failure_category}')
+            details = (f'A revisão automática não pôde ser concluída. **Categoria:** '
+                       f'`{failure_category}`. {safe_message} '
+                       'Não interprete este resultado como aprovação.')
     elif ai_enabled:
         details = ('O modo de IA foi solicitado, mas `OPENAI_API_KEY` não está disponível. '
                    'Nenhuma chamada cobrada foi realizada. **NAO_VERIFICADO**.')
@@ -132,7 +162,8 @@ def execute(event: dict, repo: str, token: str, ai_enabled: bool, model: str,
     body = format_review(run, verdict, details)
     upsert_comment(repo, number, pr['head']['sha'], body, token)
     result = {'pr': number, 'head_sha': pr['head']['sha'], 'ci_conclusion': status,
-              'verdict': verdict, 'ai_enabled': bool(ai_enabled and os.getenv('OPENAI_API_KEY'))}
+              'verdict': verdict, 'ai_enabled': bool(ai_enabled and os.getenv('OPENAI_API_KEY')),
+              'failure_category': failure_category}
     output.mkdir(parents=True, exist_ok=True)
     (output / 'auto-tech-lead.json').write_text(json.dumps(result, indent=2), encoding='utf-8')
     return result
