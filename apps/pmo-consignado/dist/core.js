@@ -6,13 +6,46 @@ export function shift(date,days){const d=new Date(date+'T12:00:00');d.setDate(d.
 export function days(a,b){return Math.round((new Date(b+'T12:00:00Z')-new Date(a+'T12:00:00Z'))/86400000);}
 export function isDate(v){return typeof v==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(v)&&!isNaN(new Date(v+'T12:00:00Z'))&&new Date(v+'T12:00:00Z').toISOString().slice(0,10)===v&&v>='1900-01-01'&&v<='2200-12-31';}
 export function uid(){return globalThis.crypto?.randomUUID?.()||Date.now().toString(36)+Math.random().toString(36).slice(2);}
-export function emptyData(){return {version:VERSION,demo:false,clusters:[],squads:[],projects:[],milestones:[],dependencies:[]};}
+export function emptyData(){return {version:VERSION,demo:false,clusters:[],squads:[],projects:[],milestones:[],dependencies:[],issues:[],decisions:[]};}
 export function hasCycle(edges){const graph=new Map();for(const e of edges){if(!graph.has(e.from))graph.set(e.from,[]);graph.get(e.from).push(e.to);}const visiting=new Set(),done=new Set();function visit(id){if(visiting.has(id))return true;if(done.has(id))return false;visiting.add(id);for(const next of graph.get(id)||[])if(visit(next))return true;visiting.delete(id);done.add(id);return false;}return [...graph.keys()].some(visit);}
 export function validateData(value){
 if(!value||typeof value!=='object'||Array.isArray(value)||value.version!==VERSION)throw Error('Formato ou versão de backup incompatível.');
 const out=emptyData();out.demo=value.demo===true;const ids=new Set();
 for(const kind of ['clusters','squads','projects','milestones','dependencies']){if(!Array.isArray(value[kind])||value[kind].length>1000)throw Error('Lista inválida ou com mais de 1.000 registros: '+kind);out[kind]=value[kind].map(x=>{if(!x||typeof x!=='object'||Array.isArray(x))throw Error('Registro inválido.');const text=(key,max=200,optional=false)=>{const v=x[key];if(optional&&(v==null||v===''))return '';if(typeof v!=='string'||!v.trim()||v.length>max)throw Error('Campo inválido: '+key);return v.trim();};const id=text('id',100);if(ids.has(id))throw Error('Identificador duplicado.');ids.add(id);if(kind==='dependencies')return {id,from:text('from',100),to:text('to',100)};const r={id,name:text('name')};if(kind==='squads')r.clusterId=text('clusterId',100);if(kind==='projects'){Object.assign(r,{owner:text('owner'),clusterId:text('clusterId',100),squadId:text('squadId',100),objective:text('objective',1000,true),notes:text('notes',3000,true)});for(const key of ['start','end','updated']){if(!isDate(x[key]))throw Error('Data inválida: '+key);r[key]=x[key];}if(r.start>r.end)throw Error('O fim do projeto deve ser posterior ao início.');if(!['Alta','Média','Baixa'].includes(x.priority)||!['Planejado','Em andamento','Concluído','Pausado'].includes(x.status))throw Error('Situação ou prioridade inválida.');r.priority=x.priority;r.status=x.status;r.forecast=x.forecast||r.end;if(!isDate(r.forecast)||r.forecast<r.start)throw Error('Previsão final inválida.');r.reason=text('reason',1000,true);}
 if(kind==='milestones'){r.projectId=text('projectId',100);for(const key of ['date','forecast']){if(!isDate(x[key]))throw Error('Data de marco inválida.');r[key]=x[key];}if(typeof x.done!=='boolean')throw Error('Conclusão de marco inválida.');r.done=x.done;r.actual=x.actual||'';if(r.actual&&(!isDate(r.actual)||r.actual>today()||!r.done))throw Error('Conclusão real inválida.');r.reason=text('reason',1000,true);}return r;});}
+for (const kind of ['issues', 'decisions']) {
+  const rows = value[kind] ?? [];
+  if (!Array.isArray(rows) || rows.length > 1000) throw Error('Lista inválida ou com mais de 1.000 registros: ' + kind);
+  out[kind] = rows.map(x => {
+    if (!x || typeof x !== 'object' || Array.isArray(x)) throw Error('Registro inválido: ' + kind);
+    const text = (key, max = 500, optional = false) => {
+      const v = x[key];
+      if (optional && (v == null || v === '')) return '';
+      if (typeof v !== 'string' || !v.trim() || v.length > max) throw Error('Campo inválido: ' + key);
+      return v.trim();
+    };
+    const id = text('id', 100);
+    if (ids.has(id)) throw Error('Identificador duplicado.');
+    ids.add(id);
+    const projectId = text('projectId', 100, true);
+    if (projectId && !value.projects.some(project => project.id === projectId)) throw Error('Registro executivo sem projeto válido.');
+    if (kind === 'issues') {
+      if (!['risk', 'blocker'].includes(x.kind)) throw Error('Tipo de risco ou impedimento inválido.');
+      if (!['Baixo', 'Médio', 'Alto', 'Crítico'].includes(x.impact)) throw Error('Impacto inválido.');
+      if (x.kind === 'risk' && !['Baixa', 'Média', 'Alta'].includes(x.probability)) throw Error('Probabilidade inválida.');
+      if (!['Aberto', 'Resolvido'].includes(x.status)) throw Error('Situação inválida.');
+      if (!isDate(x.due)) throw Error('Prazo de resposta inválido.');
+      return { id, projectId, kind: x.kind, title: text('title'), impact: x.impact,
+        probability: x.kind === 'risk' ? x.probability : '', owner: text('owner'), due: x.due,
+        action: text('action', 2000), status: x.status };
+    }
+    if (!['Pendente', 'Decidida'].includes(x.status)) throw Error('Situação da decisão inválida.');
+    if (!isDate(x.due)) throw Error('Data necessária da decisão inválida.');
+    return { id, projectId, question: text('question'), options: text('options', 1000),
+      recommendation: text('recommendation', 1000), owner: text('owner'), due: x.due,
+      status: x.status, outcome: text('outcome', 1000, true) };
+  });
+}
 const clusters=new Set(out.clusters.map(x=>x.id)),squads=new Map(out.squads.map(x=>[x.id,x])),projects=new Map(out.projects.map(x=>[x.id,x])),milestones=new Map(out.milestones.map(x=>[x.id,x]));
 for(const s of out.squads)if(!clusters.has(s.clusterId))throw Error('Squad sem cluster válido.');
 for(const p of out.projects)if(!clusters.has(p.clusterId)||!squads.has(p.squadId)||squads.get(p.squadId).clusterId!==p.clusterId)throw Error('Projeto com cluster/squad incompatível.');
@@ -111,4 +144,54 @@ export function filterMilestones(data, projectIds, sortBy = 'forecast') {
   const key = ['date', 'forecast', 'actual'].includes(sortBy) ? sortBy : 'forecast';
   return data.milestones.filter(milestone => allowed.has(milestone.projectId)).sort((a, b) =>
     (a[key] || '9999-12-31').localeCompare(b[key] || '9999-12-31') || a.name.localeCompare(b.name, 'pt-BR'));
+}
+
+// V1.2: sinais de agenda baseados apenas nas datas e atribuições cadastradas.
+export function squadSignals(data, { projectIds, reference = today(), horizonDays = 30 } = {}) {
+  if (!isDate(reference) || !Number.isInteger(horizonDays) || horizonDays < 1 || horizonDays > 365)
+    throw Error('Período de análise inválido.');
+  const allowed = new Set(projectIds || data.projects.map(project => project.id));
+  const horizonEnd = shift(reference, horizonDays);
+  return data.squads.map(squad => {
+    const projects = data.projects.filter(project => allowed.has(project.id) && project.squadId === squad.id &&
+      project.status !== 'Concluído' && project.start <= horizonEnd && (project.forecast || project.end) >= reference);
+    const overlaps = [];
+    for (let i = 0; i < projects.length; i++) for (let j = i + 1; j < projects.length; j++) {
+      if (projects[i].start <= (projects[j].forecast || projects[j].end) &&
+          projects[j].start <= (projects[i].forecast || projects[i].end)) overlaps.push([projects[i].id, projects[j].id]);
+    }
+    const milestones = data.milestones.filter(milestone => allowed.has(milestone.projectId) &&
+      projects.some(project => project.id === milestone.projectId) && !milestone.done &&
+      milestoneDate(milestone) >= reference && milestoneDate(milestone) <= horizonEnd);
+    return { squadId: squad.id, clusterId: squad.clusterId, projects, overlaps, milestones,
+      signal: overlaps.length ? 'Sobreposição de períodos' : projects.length > 1 ? 'Janelas distintas' : 'Sem conflito de datas observado' };
+  }).filter(item => item.projects.length || item.milestones.length);
+}
+
+// Simulação local e descartável: nunca grava nem altera o horizonte oficial.
+export function simulateDelay(data, sourceId, scenarioDate, { projectIds } = {}) {
+  const source = data.milestones.find(item => item.id === sourceId);
+  if (!source || source.done || !isDate(scenarioDate) || scenarioDate < milestoneDate(source))
+    throw Error('Selecione um marco pendente e uma data simulada igual ou posterior à previsão atual.');
+  const allowed = new Set(projectIds || data.projects.map(project => project.id));
+  if (!allowed.has(source.projectId)) throw Error('O marco está fora do recorte atual.');
+  const milestones = new Map(data.milestones.map(item => [item.id, item]));
+  const projected = new Map([[source.id, scenarioDate]]), queue = [source.id];
+  while (queue.length) {
+    const from = queue.shift();
+    for (const edge of data.dependencies.filter(item => item.from === from)) {
+      const target = milestones.get(edge.to);
+      if (!target || target.done) continue;
+      const date = projected.get(from) > milestoneDate(target) ? projected.get(from) : milestoneDate(target);
+      const previous = projected.get(target.id);
+      if (previous && previous >= date) continue;
+      projected.set(target.id, date); queue.push(target.id);
+    }
+  }
+  const rows = [...projected].filter(([id]) => id !== source.id).flatMap(([id, date]) => {
+    const milestone = milestones.get(id), project = data.projects.find(item => item.id === milestone.projectId);
+    return allowed.has(milestone.projectId) ? [{ milestone, project, original: milestoneDate(milestone), scenario: date,
+      direct: data.dependencies.some(edge => edge.from === source.id && edge.to === id) }] : [];
+  }).sort((a, b) => a.scenario.localeCompare(b.scenario));
+  return { source, original: milestoneDate(source), scenario: scenarioDate, affected: rows };
 }

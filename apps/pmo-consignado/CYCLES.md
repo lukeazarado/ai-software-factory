@@ -43,3 +43,46 @@ Autorização: até 15 ciclos, com checkpoint humano a cada 5. Este bloco execut
 - TL independente: diff real dos12 arquivos, conteúdo executável/testes comparado ao material local, workflow lido; APROVADO para homologação privada. Sem bloqueadores remanescentes no escopo verificado.
 - Limites: PDF renderizado, layout estreito e todos os caminhos CRUD não foram integralmente exercitados; sem auditoria WCAG completa. Armazenamento local sem sincronização entre dispositivos; impactos potenciais sem reagendamento automático.
 - Próxima aprovação: feedback do usuário no checkpoint5 antes dos ciclos6–10. Nenhum merge ou acesso público autorizado/executado nesta rodada.
+
+## Bloco 2 — ciclos 6–10 (V1.2)
+
+Autorização: o usuário pediu mais cinco rodadas e uma exploração da identidade visual/UX do Bradesco. O bloco fecha com checkpoint humano. Não são chamadas ao runner nem cinco execuções de API.
+
+## Ciclo 6 — riscos, impedimentos e decisões
+
+- PO: registrar riscos potenciais separados de impedimentos ativos; decisões com pergunta, opções, recomendação, responsável e data limite.
+- Dev: registros vinculados a projeto, com validação, ações para criar/editar/excluir e resumo para pauta executiva. Probabilidade não é solicitada para impedimento ativo.
+- Dados legados: os campos `issues` e `decisions` são opcionais no backup V1 e inicializados vazios ao carregar legado; não há migração destrutiva.
+
+## Ciclo 7 — sinais de conflitos por squad
+
+- Arquitetura: não inferir capacidade percentual sem disponibilidade/dedicação cadastradas.
+- Dev: matriz de compromissos com projetos ativos na janela dos próximos 30 dias, marcos próximos e pares de projetos cujas janelas planejadas se sobrepõem.
+- Limite explícito na interface: sinaliza concentração/conflito; não calcula utilização nem disponibilidade real.
+
+## Ciclo 8 — simulação de atraso
+
+- PO/Arquitetura: simular uma data de previsão para um marco pendente e propagar pelas dependências alcançáveis, preservando datas oficiais.
+- Dev: propagação em DAG; em caminhos convergentes prevalece a data mais tardia entre pré-requisitos; concluídos não são reprogramados; filtro visual mantém o recorte de projetos sem cortar a propagação transitiva.
+- Testes verificam a saída da simulação e a não mutação do grafo/datas oficiais.
+
+## Ciclo 9 — exploração de identidade visual e UX
+
+- Referência solicitada: página inicial oficial Bradesco (`https://banco.bradesco/html/classic/index.shtm`), inspecionada no navegador.
+- Decisão: usar vermelho/crimson, bordô e neutros brancos/cinzas em hierarquia própria de produto PMO. Não copiar marca, logotipo, banners ou padrões de autenticação financeira.
+- Hierarquia aplicada para navegação e ações; severidade de risco continua com sinalização semântica distinta. Foco de teclado usa contorno visível e cores com contraste reforçado.
+- Desvio reconhecido: nessa primeira passagem explorei paleta e UI, mas não acionei a skill UX nem registrei proposta de fluxo, estados, heurísticas ou aceite UX.
+- Regularização antes da homologação: revisão retrospectiva pela skill `projetar-ux` em revisor UX dedicado; Arquiteto e UX convergiram sem necessidade de arbitragem do PO. Corrigidos navegação mobile, anúncio acessível da simulação e microcopy do histórico editável.
+- O runner da fábrica (`factory/runner.py --enable-ux`) não foi executado; a revisão retrospectiva usou skill e colaboração de UX no ChatGPT. Não afirmar execução nativa do runner.
+- Limite: proposta avaliada por inspeção, não por pesquisa ou teste formal de usuários; viewport mobile e leitor de tela ainda precisam de verificação prática.
+
+## Ciclo 10 — regressão, integração e preparação para homologação
+
+- Dev: versão visual V1.2; testes de armazenamento V1/V1.1 ajustados para incluir o novo módulo executivo; relatório inclui riscos/decisões aplicáveis sem observações internas por padrão.
+- QA local inicial: 43 aprovados; revisão independente sinalizou classificação indevida de períodos sequenciais como simultâneos. Correção registrada abaixo.
+- Navegador: preview local confirmou fluxo de cadastro/edição de risco e decisão, persistência após recarregar, tipo impedimento, matriz de squads, simulação com dependências transitivas e ausência de alteração às datas oficiais. O modal do relatório foi aberto; a renderização visual/PDF ainda não foi confirmada.
+- QA local e independente após regularização UX: `node --test --test-reporter=spec tests/*.test.mjs` — 47 aprovados, 0 falhas; sintaxe e `git diff --check` passaram.
+- TL independente no PR #16, SHA `2516efb243f96c1d04383db4c126c34b3099057a`: aprovou para homologação privada; verificou correções do achado anterior, patch UX e compatibilidade; sem novos bloqueadores.
+- CI no SHA do patch UX: PMO `41894630788` e Agenda `41894630867`, ambos success.
+- Limite restante: viewport móvel real, leitor de tela e WCAG prática ainda não foram verificados.
+- Próxima aprovação: feedback humano neste checkpoint de cinco ciclos. Sem merge; site deve continuar privado.

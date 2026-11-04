@@ -4,7 +4,8 @@ import vm from 'node:vm';
 import {readFile} from 'node:fs/promises';
 const coreSource=await readFile(new URL('../dist/core.js',import.meta.url),'utf8');
 const core=await import('data:text/javascript;base64,'+Buffer.from(coreSource).toString('base64'));
-const appSource=(await readFile(new URL('../dist/app.js',import.meta.url),'utf8')).replace(/^import[^\n]*\n/,'');
+const appSource=(await readFile(new URL('../dist/app.js',import.meta.url),'utf8')).replace(/^import[^\n]*\n/gm,'');
+const executiveSource=(await readFile(new URL('../dist/executive.js',import.meta.url),'utf8')).replace(/^import[^\n]*\n/,'').replace(/^export /gm,'');
 
 // Only persistence/handlers run here. Browser layout, native dialogs and DOM behavior
 // are intentionally outside this fixture; the owner checks them in a real browser.
@@ -12,7 +13,7 @@ function boot(raw,options={}){
   const nodes=new Map(),writes=[],papers=[];
   const node=id=>{if(!nodes.has(id))nodes.set(id,{value:'',textContent:'',innerHTML:'',hidden:false,style:{},classList:{add(){},remove(){},toggle(){}},listeners:{},addEventListener(type,fn){this.listeners[type]=fn;},setAttribute(){},querySelector(){return node(id+'-child');},showModal(){this.open=true;},close(){this.open=false;}});return nodes.get(id);};
   const context=vm.createContext({...core,structuredClone,console,Map,Set,Date,JSON,Error,Blob,URL,setTimeout:()=>1,clearTimeout(){},confirm:()=>options.confirm!==false,window:{print(){}},document:{getElementById:node,querySelectorAll:()=>[],querySelector:()=>null,createElement:()=>({innerHTML:'',className:''}),body:{append:paper=>papers.push(paper)},addEventListener(){}},localStorage:{getItem(){if(options.readError)throw Error('blocked');return raw;},setItem(key,value){if(options.writeError)throw Error('quota');writes.push({key,value});raw=value;}}});
-  vm.runInContext(appSource+'\nglobalThis.QA={snapshot:()=>JSON.stringify(data),save,blocked:()=>storageBlocked};',context);
+  vm.runInContext(executiveSource+'\n'+appSource+'\nglobalThis.QA={snapshot:()=>JSON.stringify(data),save,blocked:()=>storageBlocked};',context);
   return {context,nodes,writes,papers,snapshot:()=>JSON.parse(context.QA.snapshot()),save:value=>context.QA.save(value),blocked:()=>context.QA.blocked(),raw:()=>raw};
 }
 test('valid stored data loads without overwriting it on startup',()=>{
@@ -72,4 +73,15 @@ test('explicit include-notes option and project filters are applied to generated
   const app=boot(JSON.stringify(data));app.nodes.get('search').value=data.projects[0].name;app.nodes.get('report').onclick();app.context.document.getElementById('include-notes').checked=true;app.nodes.get('print-report').onclick();
   const html=app.papers.at(-1).innerHTML;
   assert.ok(html.includes('INTERNAL_NOTE_OPT_IN'));assert.ok(html.includes('<b>1</b>projetos'));assert.ok(!html.includes(data.projects[2].objective));
+});
+test('V1.2 report includes scoped actionable risks and pending decisions without internal notes',()=>{
+  const data=core.demoData();
+  data.projects[0].notes='PRIVATE_EXEC_NOTE';
+  data.issues=[{id:'risk-report',projectId:'p1',kind:'risk',title:'REPORT_RISK_TITLE',impact:'Alto',probability:'Média',owner:'Pessoa A',due:core.shift(core.today(),3),action:'REPORT_RISK_ACTION',status:'Aberto'}];
+  data.decisions=[{id:'decision-report',projectId:'p1',question:'REPORT_DECISION_QUESTION',options:'Opção A / Opção B',recommendation:'REPORT_DECISION_RECOMMENDATION',owner:'Pessoa B',due:core.shift(core.today(),4),status:'Pendente',outcome:''}];
+  const app=boot(JSON.stringify(data));app.nodes.get('report').onclick();app.nodes.get('print-report').onclick();
+  const html=app.papers.at(-1).innerHTML;
+  assert.ok(html.includes('REPORT_RISK_TITLE'));assert.ok(html.includes('REPORT_RISK_ACTION'));
+  assert.ok(html.includes('REPORT_DECISION_QUESTION'));assert.ok(html.includes('REPORT_DECISION_RECOMMENDATION'));
+  assert.ok(!html.includes('PRIVATE_EXEC_NOTE'));
 });
