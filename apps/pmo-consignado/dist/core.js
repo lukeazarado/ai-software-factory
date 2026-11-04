@@ -36,4 +36,79 @@ const risks=[];for(const edge of data.dependencies){const source=data.milestones
 }
 export function csvCell(v){let s=String(v??'');if(/^[\s]*[=+@-]/.test(s))s="'"+s;return '"'+s.replaceAll('"','""')+'"';}
 export function projectsCSV(data,projects=data.projects){const rows=[['Projeto','Cluster','Squad','Responsável','Prioridade','Situação','Início','Fim planejado','Previsão final','Atualização','Objetivo','Origem dos dados'],...projects.map(p=>[p.name,data.clusters.find(c=>c.id===p.clusterId)?.name,data.squads.find(s=>s.id===p.squadId)?.name,p.owner,p.priority,p.status,p.start,p.end,p.forecast||p.end,p.updated,p.objective,data.demo?'DADOS FICTÍCIOS DE DEMONSTRAÇÃO':'Portfólio pessoal'])];return '\uFEFF'+rows.map(r=>r.map(csvCell).join(';')).join('\r\n');}
-export function demoData(){const d=today(),data={version:1,demo:true,clusters:[{id:'c1',name:'Originação'},{id:'c2',name:'Plataforma'},{id:'c3',name:'Gestão de carteira'}],squads:[{id:'s1',name:'Jornada digital',clusterId:'c1'},{id:'s2',name:'Integrações',clusterId:'c2'},{id:'s3',name:'Pós-venda',clusterId:'c3'}],projects:[{id:'p1',name:'Nova jornada de contratação',owner:'Ana · exemplo',clusterId:'c1',squadId:'s1',start:shift(d,-14),end:shift(d,35),updated:d,priority:'Alta',status:'Em andamento',objective:'Reduzir o atrito na contratação de consignado.',notes:'Exemplo de anotação interna.'},{id:'p2',name:'Motor de elegibilidade',owner:'Bruno · exemplo',clusterId:'c2',squadId:'s2',start:shift(d,-25),end:shift(d,21),updated:shift(d,-10),priority:'Alta',status:'Em andamento',objective:'Disponibilizar regras unificadas para as jornadas.',notes:''},{id:'p3',name:'Portal de acompanhamento',owner:'Carla · exemplo',clusterId:'c3',squadId:'s3',start:shift(d,4),end:shift(d,49),updated:d,priority:'Média',status:'Planejado',objective:'Dar visibilidade ao andamento dos contratos.',notes:''}],milestones:[{id:'m1',projectId:'p2',name:'API de elegibilidade disponível',date:shift(d,-2),forecast:shift(d,12),done:false},{id:'m2',projectId:'p1',name:'Integração da jornada',date:shift(d,7),forecast:shift(d,7),done:false},{id:'m3',projectId:'p1',name:'Piloto com clientes',date:shift(d,28),forecast:shift(d,28),done:false},{id:'m4',projectId:'p3',name:'Consulta de propostas integrada',date:shift(d,25),forecast:shift(d,25),done:false},{id:'m5',projectId:'p2',name:'Contrato de API aprovado',date:shift(d,-10),forecast:shift(d,-10),actual:shift(d,-10),done:true}],dependencies:[{id:'d1',from:'m1',to:'m2'},{id:'d2',from:'m2',to:'m3'},{id:'d3',from:'m3',to:'m4'}]};return validateData(data);}
+export function demoData(){const d=today(),data={version:1,demo:true,clusters:[{id:'c1',name:'Originação'},{id:'c2',name:'Plataforma'},{id:'c3',name:'Gestão de carteira'}],squads:[{id:'s1',name:'Jornada digital',clusterId:'c1'},{id:'s2',name:'Integrações',clusterId:'c2'},{id:'s3',name:'Pós-venda',clusterId:'c3'}],projects:[{id:'p1',name:'Nova jornada de contratação',owner:'Ana · exemplo',clusterId:'c1',squadId:'s1',start:shift(d,-14),end:shift(d,35),updated:d,priority:'Alta',status:'Em andamento',objective:'Reduzir o atrito na contratação de consignado.',notes:'Exemplo de anotação interna.'},{id:'p2',name:'Motor de elegibilidade',owner:'Bruno · exemplo',clusterId:'c2',squadId:'s2',start:shift(d,-25),end:shift(d,21),updated:shift(d,-10),priority:'Alta',status:'Em andamento',objective:'Disponibilizar regras unificadas para as jornadas.',notes:''},{id:'p3',name:'Portal de acompanhamento',owner:'Carla · exemplo',clusterId:'c3',squadId:'s3',start:shift(d,4),end:shift(d,49),updated:d,priority:'Média',status:'Planejado',objective:'Dar visibilidade ao andamento dos contratos.',notes:''}],milestones:[{id:'m1',projectId:'p2',name:'API de elegibilidade disponível',date:shift(d,-2),forecast:shift(d,12),done:false},{id:'m2',projectId:'p1',name:'Integração da jornada',date:shift(d,7),forecast:shift(d,7),done:false},{id:'m3',projectId:'p1',name:'Piloto com clientes',date:shift(d,28),forecast:shift(d,28),done:false},{id:'m4',projectId:'p3',name:'Consulta de propostas integrada',date:shift(d,25),forecast:shift(d,25),done:false},{id:'m5',projectId:'p2',name:'Contrato de API aprovado',date:shift(d,-10),forecast:shift(d,-10),actual:weekBounds(d).start,done:true}],dependencies:[{id:'d1',from:'m1',to:'m2'},{id:'d2',from:'m2',to:'m3'},{id:'d3',from:'m3',to:'m4'}]};return validateData(data);}
+
+export function normalizeSearch(value) {
+  return String(value ?? '').trim().normalize('NFD').replace(/\p{M}/gu, '').toLocaleLowerCase('pt-BR');
+}
+
+// V1.1: filtros puros para manter os mesmos recortes na tela e no relatório.
+export function filterProjects(data, filters = {}) {
+  const query = normalizeSearch(filters.search);
+  return data.projects.filter(project =>
+    (!query || normalizeSearch(`${project.name} ${project.owner}`).includes(query)) &&
+    (!filters.clusterId || project.clusterId === filters.clusterId) &&
+    (!filters.squadId || project.squadId === filters.squadId) &&
+    (!filters.status || project.status === filters.status)
+  );
+}
+
+export function filterOrganization(data, filters = {}) {
+  const query = normalizeSearch(filters.search);
+  return data.clusters.flatMap(cluster => {
+    if (filters.clusterId && cluster.id !== filters.clusterId) return [];
+    const clusterMatches = !query || normalizeSearch(cluster.name).includes(query);
+    const squads = data.squads.filter(squad => squad.clusterId === cluster.id &&
+      (!filters.squadId || squad.id === filters.squadId) &&
+      (clusterMatches || normalizeSearch(squad.name).includes(query)));
+    if (filters.squadId && !squads.length) return [];
+    if (!clusterMatches && !squads.length) return [];
+    return [{ ...cluster, squads }];
+  });
+}
+
+export function filterDependencies(data, { projectIds, milestoneQuery = '' } = {}) {
+  const allowed = new Set(projectIds || data.projects.map(project => project.id));
+  const query = normalizeSearch(milestoneQuery);
+  const milestones = new Map(data.milestones.map(milestone => [milestone.id, milestone]));
+  return data.dependencies.filter(edge => {
+    const source = milestones.get(edge.from), target = milestones.get(edge.to);
+    return source && target && (allowed.has(source.projectId) || allowed.has(target.projectId)) &&
+      (!query || normalizeSearch(source.name).includes(query) ||
+        normalizeSearch(target.name).includes(query));
+  });
+}
+
+export function weekBounds(reference = today()) {
+  if (!isDate(reference)) throw Error('Selecione uma data válida para a semana.');
+  const weekday = new Date(`${reference}T12:00:00Z`).getUTCDay();
+  const start = shift(reference, -((weekday + 6) % 7));
+  return { start, end: shift(start, 6) };
+}
+
+export function weeklyDeliveries(data, { projectIds, reference = today(), groupBy = 'squad' } = {}) {
+  const { start, end } = weekBounds(reference);
+  const allowed = new Set(projectIds || data.projects.map(project => project.id));
+  const projects = new Map(data.projects.map(project => [project.id, project]));
+  const completed = data.milestones.filter(milestone => milestone.done && allowed.has(milestone.projectId));
+  const deliveries = completed.filter(milestone => isDate(milestone.actual) &&
+    milestone.actual >= start && milestone.actual <= end)
+    .sort((a, b) => a.actual.localeCompare(b.actual) || a.name.localeCompare(b.name, 'pt-BR'));
+  const groups = new Map();
+  for (const milestone of deliveries) {
+    const project = projects.get(milestone.projectId);
+    const key = groupBy === 'cluster' ? project.clusterId : project.squadId;
+    const rows = groups.get(key) || [];
+    rows.push(milestone);
+    groups.set(key, rows);
+  }
+  return { start, end, deliveries, groups: [...groups].map(([id, milestones]) => ({ id, milestones })),
+    missingActual: completed.filter(milestone => !isDate(milestone.actual)).length };
+}
+
+export function filterMilestones(data, projectIds, sortBy = 'forecast') {
+  const allowed = new Set(projectIds);
+  const key = ['date', 'forecast', 'actual'].includes(sortBy) ? sortBy : 'forecast';
+  return data.milestones.filter(milestone => allowed.has(milestone.projectId)).sort((a, b) =>
+    (a[key] || '9999-12-31').localeCompare(b[key] || '9999-12-31') || a.name.localeCompare(b.name, 'pt-BR'));
+}
