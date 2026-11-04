@@ -1,9 +1,15 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
+import vm from 'node:vm';
 
 const source = await readFile(new URL('../dist/core.js', import.meta.url), 'utf8');
 const core = await import('data:text/javascript;base64,' + Buffer.from(source).toString('base64'));
+const executiveSource = (await readFile(new URL('../dist/executive.js', import.meta.url), 'utf8'))
+  .replace(/^import[^\n]*\n/, '').replace(/^export /gm, '');
+const executiveContext = vm.createContext({ squadSignals: core.squadSignals, simulateDelay: core.simulateDelay,
+  milestoneDate: core.milestoneDate, isDate: core.isDate, today: core.today, Map, Set });
+vm.runInContext(executiveSource + '\nglobalThis.simulationAnnouncement=simulationAnnouncement;', executiveContext);
 
 function fixture() {
   const data = core.emptyData();
@@ -93,4 +99,22 @@ test('V1.2 simulation respects the project recorte while still traversing cross-
   const result = core.simulateDelay(data, 'm1', '2026-11-15', { projectIds: ['p1'] });
   assert.deepEqual(result.affected, []);
   assert.throws(() => core.simulateDelay(data, 'm2', '2026-11-20', { projectIds: ['p1'] }), /fora do recorte/);
+});
+
+test('V1.2 simulation announcement summarizes date and affected deliveries in the selected scope', () => {
+  const data = fixture();
+  const announce = executiveContext.simulationAnnouncement;
+  assert.equal(announce(data, data.projects, 'm1', '2026-11-15', { fmt: value => value }),
+    'Cenário de API base atualizado para 2026-11-15. 3 entregas potencialmente afetadas.');
+  assert.equal(announce(data, [data.projects[0]], 'm1', '2026-11-15', { fmt: value => value }),
+    'Cenário de API base atualizado para 2026-11-15. Nenhuma entrega potencialmente afetada no recorte.');
+});
+
+test('V1.2 exposes simulation status persistently and uses a two-column mobile navigation', async () => {
+  const html = await readFile(new URL('../dist/index.html', import.meta.url), 'utf8');
+  const css = await readFile(new URL('../dist/styles.css', import.meta.url), 'utf8');
+  assert.match(html, /id="simulation-announcement" class="sr-only" role="status" aria-live="polite" aria-atomic="true"/);
+  assert.ok(html.indexOf('id="simulation-announcement"') > html.indexOf('<div id="view"></div>'));
+  assert.match(css, /@media\(max-width:760px\)\{\.sidebar nav\{display:grid;grid-template-columns:repeat\(2,minmax\(0,1fr\)\);overflow:visible/);
+  assert.match(css, /\.sidebar nav button\{white-space:normal;min-height:48px/);
 });

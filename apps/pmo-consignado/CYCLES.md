@@ -71,14 +71,18 @@ Autorização: o usuário pediu mais cinco rodadas e uma exploração da identid
 - Referência solicitada: página inicial oficial Bradesco (`https://banco.bradesco/html/classic/index.shtm`), inspecionada no navegador.
 - Decisão: usar vermelho/crimson, bordô e neutros brancos/cinzas em hierarquia própria de produto PMO. Não copiar marca, logotipo, banners ou padrões de autenticação financeira.
 - Hierarquia aplicada para navegação e ações; severidade de risco continua com sinalização semântica distinta. Foco de teclado usa contorno visível e cores com contraste reforçado.
-- Limite: inspiração visual avaliada, não uma auditoria WCAG ou teste formal com usuários.
+- Desvio reconhecido: nessa primeira passagem explorei paleta e UI, mas não acionei a skill UX nem registrei proposta de fluxo, estados, heurísticas ou aceite UX.
+- Regularização antes da homologação: revisão retrospectiva pela skill `projetar-ux` em revisor UX dedicado; Arquiteto e UX convergiram sem necessidade de arbitragem do PO. Corrigidos navegação mobile, anúncio acessível da simulação e microcopy do histórico editável.
+- O runner da fábrica (`factory/runner.py --enable-ux`) não foi executado; a revisão retrospectiva usou skill e colaboração de UX no ChatGPT. Não afirmar execução nativa do runner.
+- Limite: proposta avaliada por inspeção, não por pesquisa ou teste formal de usuários; viewport mobile e leitor de tela ainda precisam de verificação prática.
 
 ## Ciclo 10 — regressão, integração e preparação para homologação
 
 - Dev: versão visual V1.2; testes de armazenamento V1/V1.1 ajustados para incluir o novo módulo executivo; relatório inclui riscos/decisões aplicáveis sem observações internas por padrão.
 - QA local inicial: 43 aprovados; revisão independente sinalizou classificação indevida de períodos sequenciais como simultâneos. Correção registrada abaixo.
 - Navegador: preview local confirmou fluxo de cadastro/edição de risco e decisão, persistência após recarregar, tipo impedimento, matriz de squads, simulação com dependências transitivas e ausência de alteração às datas oficiais. O modal do relatório foi aberto; a renderização visual/PDF ainda não foi confirmada.
-- TL independente: o achado do diff inicial foi corrigido; revisão do SHA `8481b7922bddf84a678f9c3c1bfc7a0801e3e653` confirmou a correção e não encontrou novos bloqueadores. APROVADO para homologação privada.
-- QA automatizado atualizado: `node --test --test-reporter=spec tests/*.test.mjs` — 44 aprovados, 0 falhas; `node --check` de `app.js`, `core.js` e `executive.js` passou.
-- CI no SHA atualizado do PR: PMO `41891834670` e Agenda `41891834754`, ambos success.
+- TL independente do núcleo V1.2 (antes do patch UX): o achado do diff inicial foi corrigido; revisão do SHA `8481b7922bddf84a678f9c3c1bfc7a0801e3e653` confirmou a correção e não encontrou novos bloqueadores. APROVADO naquele head para homologação privada.
+- QA automatizado atualizado após a regularização UX: `node --test --test-reporter=spec tests/*.test.mjs` — 47 aprovados, 0 falhas; `node --check` de `app.js`, `core.js` e `executive.js` passou.
+- CI do núcleo V1.2: PMO `41891834670` e Agenda `41891834754`, ambos success no head anterior ao patch UX.
+- Patch UX posterior: 47/47 testes locais passaram; o diff atualizado aguarda novo CI e revisão TL antes de qualquer aprovação para homologação.
 - Próxima aprovação: feedback humano neste checkpoint de cinco ciclos. Sem merge; site deve continuar privado.

@@ -28,7 +28,7 @@ export function executiveAgenda(data, projects, { esc, fmt, name }) {
     <div class="card-tools"><button class="secondary" data-add="decisions">＋ Decisão</button><button class="primary" data-add="issues">＋ Risco ou impedimento</button></div></div>
     <section class="exec-columns"><article class="card"><div class="card-head"><div><h2>Riscos e impedimentos <small>${openIssues.length} abertos</small></h2><p>Priorize a resposta antes de afetar a entrega.</p></div></div><div class="card-body">${list(openIssues, issueCard, 'Nenhum risco ou impedimento aberto neste recorte.')}</div></article>
     <article class="card"><div class="card-head"><div><h2>Decisões pendentes <small>${pending.length}</small></h2><p>Pergunta, opções, recomendação e prazo em uma pauta.</p></div></div><div class="card-body">${list(pending, decisionCard, 'Nenhuma decisão pendente neste recorte.')}</div></article></section>
-    <section class="card"><div class="card-head"><div><h2>Histórico resolvido</h2><p>Registros encerrados permanecem disponíveis para consulta.</p></div></div><div class="card-body">${list(issues.filter(item => item.status === 'Resolvido'), issueCard, 'Ainda não há registros resolvidos.')}${list(decisions.filter(item => item.status === 'Decidida'), decisionCard, 'Ainda não há decisões concluídas.')}</div></section>`;
+    <section class="card"><div class="card-head"><div><h2>Histórico resolvido</h2><p>Registros encerrados permanecem disponíveis e podem ser editados.</p></div></div><div class="card-body">${list(issues.filter(item => item.status === 'Resolvido'), issueCard, 'Ainda não há registros resolvidos.')}${list(decisions.filter(item => item.status === 'Decidida'), decisionCard, 'Ainda não há decisões concluídas.')}</div></section>`;
 }
 
 export function capacityView(data, projects, { esc, fmt, name }) {
@@ -57,6 +57,17 @@ export function simulationView(data, projects, sourceId, scenarioDate, { esc, fm
     <p class="inline-note">Para cada entrega dependente, o cenário considera a data mais tarde entre sua previsão atual e a data simulada do fornecedor. É uma leitura simplificada de alcance; não calcula caminho crítico, duração de trabalho ou nova data oficial.</p>
     ${result.affected.length ? `<h3>Entregas potencialmente afetadas</h3><div class="table-wrap"><table><thead><tr><th>Entrega</th><th>Cluster / squad</th><th>Previsão atual</th><th>Neste cenário</th><th>Relação</th></tr></thead><tbody>${result.affected.map(row => `<tr><td><strong>${esc(row.milestone.name)}</strong><span class="subtext">${esc(row.project.name)}</span></td><td>${esc(name('clusters', row.project.clusterId))} / ${esc(name('squads', row.project.squadId))}</td><td>${fmt(row.original)}</td><td><strong>${fmt(row.scenario)}</strong></td><td>${row.direct ? 'Direta' : 'Transitivamente alcançada'}</td></tr>`).join('')}</tbody></table></div>` : '<div class="empty">Nenhuma entrega pendente ligada a este marco no recorte.</div>'}
     </div></section>`;
+}
+
+export function simulationAnnouncement(data, projects, sourceId, scenarioDate, { fmt }) {
+  const allowed = new Set(projects.map(project => project.id));
+  const source = data.milestones.find(item => item.id === sourceId && !item.done && allowed.has(item.projectId));
+  if (!source) return 'Não há marco pendente selecionado para simular neste recorte.';
+  const result = simulateDelay(data, source.id, scenarioDate, { projectIds: [...allowed] });
+  const total = result.affected.length;
+  const summary = total === 0 ? 'Nenhuma entrega potencialmente afetada no recorte.'
+    : `${total} entrega${total === 1 ? '' : 's'} potencialmente afetada${total === 1 ? '' : 's'}.`;
+  return `Cenário de ${source.name} atualizado para ${fmt(result.scenario)}. ${summary}`;
 }
 
 export function executiveReportHTML(data, projects, { esc, fmt, name }) {

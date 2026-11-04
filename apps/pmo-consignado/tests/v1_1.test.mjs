@@ -100,7 +100,7 @@ function boot(data=fixture()){
     nodes.set(id,el);return el;
   }
   const context=vm.createContext({...c,structuredClone,console,Map,Set,Date,JSON,Error,Blob,URL,setTimeout:()=>1,clearTimeout(){},confirm:()=>true,window:{print(){}},document:{getElementById:node,querySelectorAll:()=>[],querySelector:()=>null,createElement:()=>({innerHTML:'',className:''}),body:{append:paper=>papers.push(paper)},addEventListener(type,fn){(events[type]||=[]).push(fn);}},localStorage:{getItem(key){assert.equal(key,'orbita-pmo-v1');return JSON.stringify(data);},setItem(){}}});
-  vm.runInContext(executiveSource+'\n'+appSource+'\nglobalThis.QA={go,render,selected,week:()=>selectedWeek,timeline:()=>timelineView};',context);
+  vm.runInContext(executiveSource+'\nconst capacityHTML=capacityView;const simulationHTML=simulationView;\n'+appSource+'\nglobalThis.QA={go,render,selected,week:()=>selectedWeek,timeline:()=>timelineView,view:()=>currentView};',context);
   const change=(id,value)=>{node(id).value=value;for(const fn of events.change||[])fn({target:node(id)});};
   const click=(selector,dataset={})=>{const target={closest:s=>s===selector?{dataset}:null};for(const fn of events.click||[])fn({target});};
   return {context,nodes,papers,node,change,click};
@@ -130,4 +130,11 @@ test('V1.1 selected week survives navigation and executive report uses same week
 test('V1.1 week navigation refuses out-of-range moves without corrupting state or render',()=>{
   const app=boot();app.change('week-picker','1900-01-01');assert.doesNotThrow(()=>app.click('[data-week-step]',{weekStep:'-7'}));assert.equal(app.context.QA.week(),'1900-01-01');
   app.change('week-picker','2200-12-31');assert.doesNotThrow(()=>app.click('[data-week-step]',{weekStep:'7'}));assert.equal(app.context.QA.week(),'2200-12-29');
+});
+test('V1.2 simulation changes update the persistent accessible status after rerender',()=>{
+  const app=boot();app.context.QA.go('simulation');
+  app.change('simulation-date','2024-03-10');
+  assert.equal(app.context.QA.view(),'simulation');
+  assert.match(app.node('simulation-announcement').textContent,/Cenário de Pendente nesta semana atualizado/);
+  assert.match(app.node('simulation-announcement').textContent,/Nenhuma entrega potencialmente afetada no recorte\./);
 });

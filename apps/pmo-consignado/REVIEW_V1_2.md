@@ -29,3 +29,7 @@ Conflitos estimados não medem capacidade real. Impressão/PDF final, layout mó
 ## Atualização documental
 
 Este relatório foi anexado ao PR após a revisão de código no SHA acima. Nenhuma linha de código executável mudou nesta atualização documental.
+
+## Patch UX posterior
+
+Após a inclusão do relatório, o UX Designer e o Arquiteto convergiram em duas correções moderadas e um ajuste de conteúdo: grade mobile com rotas visíveis, região persistente de status acessível para a simulação e rótulo explícito de que registros resolvidos podem ser editados. A implementação posterior deste patch altera código executável; o parecer acima não cobre esse novo diff. A nova revisão TL deve atualizar este veredito para o head final do PR.

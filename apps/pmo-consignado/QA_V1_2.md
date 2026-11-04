@@ -8,7 +8,7 @@ Comando executado na raiz do app:
 node --test --test-reporter=spec tests/*.test.mjs
 ```
 
-**44 testes passaram; 0 falhas.** Incluem regressões V1 e V1.1, carregamento de backup antigo, validação e referências executivas, janelas sobrepostas e sequenciais, propagação de atraso por dependências convergentes, recorte de projetos e não mutação das datas oficiais.
+**47 testes passaram; 0 falhas.** Incluem regressões V1 e V1.1, carregamento de backup antigo, validação e referências executivas, janelas sobrepostas e sequenciais, propagação de atraso por dependências convergentes, anúncio textual do cenário e não mutação das datas oficiais.
 
 Verificações de sintaxe executadas:
 
@@ -27,11 +27,16 @@ As três passaram sem saída de erro.
 - Matriz de squads informa janela de 30 dias, projetos e marcos sem apresentar percentual inventado de utilização.
 - Simulação de atraso em marco pendente mostra impacto direto e transitivo, inclusive em dependência entre squads; a interface informa que datas oficiais não são alteradas.
 - Modal de relatório abriu e manteve a opção de observações internas desmarcada. A impressão nativa foi solicitada, mas o PDF/renderização final não foi visualmente conferido.
+- Teste VM confirma que mudança da data simulada preenche a região persistente `role=status` depois do rerender. Teste estático confirma a região fora de `#view` e CSS da grade mobile em duas colunas.
 
 ## Limites da evidência
 
-Não houve verificação completa em viewport móvel, automação E2E, teste de leitor de tela ou auditoria WCAG. O site conserva armazenamento local por navegador, sem sincronização. As ações manuais ocorreram apenas no preview local; não foram feitas nos dados da publicação privada.
+Não houve verificação completa em viewport móvel, automação E2E, teste com leitor de tela ou auditoria WCAG. Os novos critérios de 320–390 px e anúncio no leitor de tela precisam de verificação prática. O site conserva armazenamento local por navegador, sem sincronização. As ações manuais ocorreram apenas no preview local; não foram feitas nos dados da publicação privada.
 
 ## Correção após revisão independente
 
 O TL detectou que períodos sequenciais sem sobreposição eram rotulados como simultâneos. A regra foi corrigida: apenas pares realmente sobrepostos recebem o sinal de sobreposição; múltiplos projetos sem pares sobrepostos são identificados como “Janelas distintas”. Foi adicionado teste de regressão. A classificação corrigida foi coberta por teste automatizado; não foi repetida manualmente no navegador após esse ajuste de rótulo.
+
+## Correção após revisão UX retrospectiva
+
+A revisão da skill `projetar-ux` e a convergência com o Arquiteto apontaram navegação móvel sem indicação clara de rotas fora da faixa e falta de anúncio próprio quando a simulação muda. A navegação mobile agora usa grade de duas colunas, sem scroll horizontal; mudanças no cenário atualizam uma região persistente `aria-live`; histórico esclarece que registros resolvidos continuam editáveis. Testes automatizados cobrem o anúncio e os seletores/atributos previstos; viewport físico e leitor de tela permanecem pendentes.

@@ -26,3 +26,4 @@ nav button:focus-visible,.primary:focus-visible{outline-color:#731328}
 .filter-help{font-size:11px;color:var(--muted);margin:-18px 0 13px}
 @media(max-width:760px){.exec-columns{grid-template-columns:1fr}.simulation-controls{grid-template-columns:1fr}.sidebar nav{scrollbar-width:thin}}
 @media print{.exec-item,.scenario-summary{break-inside:avoid}}
+@media(max-width:760px){.sidebar nav{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));overflow:visible;gap:6px;margin-top:16px;padding-bottom:12px}.sidebar nav button{white-space:normal;min-height:48px;padding:9px 8px;font-size:11px;line-height:1.3}}
