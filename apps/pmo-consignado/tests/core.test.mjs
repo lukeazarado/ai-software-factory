@@ -61,13 +61,30 @@ test('reject duplicate edges, self-dependency and imported cycle',()=>{
 test('impacts find all downstream deliveries once and no unrelated nodes',()=>{
   const d=fresh();assert.deepEqual(new Set(impacts(d,'m1')),new Set(['m2','m3','m4']));assert.deepEqual(impacts(d,'m5'),[]);
 });
+test('risk propagation stops at completed deliveries while structural reach remains visible',()=>{
+  const d=fresh(),p=d.projects.find(p=>p.id==='p3');
+  const future=shift(core.today(),30);p.end=future;p.forecast=future;
+  d.milestones.find(m=>m.id==='m4').forecast=future;d.milestones.find(m=>m.id==='m4').date=future;
+  assert.equal(health(d,p).label,'Em atenção','Pending upstream delivery risk propagates');
+  d.milestones.find(m=>m.id==='m3').done=true;
+  assert.equal(health(d,p).label,'No prazo','Completed intermediate delivery breaks operational impact');
+  assert.ok(impacts(d,'m1').includes('m4'),'Structural map retains original link');
+  assert.ok(!impacts(d,'m1',{pendingOnly:true}).includes('m4'));
+});
+test('project forecast and milestone actual dates survive validated roundtrip',()=>{
+  const d=fresh();d.projects[0].forecast=shift(d.projects[0].end,3);d.projects[0].reason='Ajuste de fornecedor';
+  const done=d.milestones.find(m=>m.done);done.actual=shift(core.today(),-1);
+  const v=validateData(d);assert.equal(v.projects[0].forecast,d.projects[0].forecast);assert.equal(v.projects[0].reason,d.projects[0].reason);assert.equal(v.milestones.find(m=>m.id===done.id).actual,done.actual);
+  done.actual=shift(core.today(),1);assert.throws(()=>validateData(d),/Conclusão real/);
+  done.actual='2026-02-30';assert.throws(()=>validateData(d),/Conclusão real/);
+});
 test('health prioritizes completed, overdue and direct dependency risks',()=>{
   const d=fresh(),p=d.projects[0],now='2026-11-04';
-  d.milestones=[];d.dependencies=[];p.start='2026-11-01';p.end='2026-12-01';p.status='Em andamento';
+  d.milestones=[];d.dependencies=[];p.start='2026-11-01';p.end='2026-12-01';p.forecast=p.end;p.status='Em andamento';
   assert.notEqual(health(d,p,now).label,'No prazo','Ausência de marcos não comprova saúde');
-  p.end='2026-11-03';assert.equal(health(d,p,now).label,'Atrasado');
+  p.end='2026-11-03';p.forecast=p.end;assert.equal(health(d,p,now).label,'Atrasado');
   p.status='Concluído';assert.equal(health(d,p,now).label,'Concluído');
-  p.status='Pausado';p.end='2026-12-01';assert.equal(health(d,p,now).label,'Em atenção');
+  p.status='Pausado';p.end='2026-12-01';p.forecast=p.end;assert.equal(health(d,p,now).label,'Em atenção');
   p.status='Em andamento';
   d.milestones=[{id:'a',projectId:'p2',date:'2026-11-09',forecast:'2026-11-09',done:false},{id:'b',projectId:p.id,date:'2026-11-08',forecast:'2026-11-08',done:false}];d.dependencies=[{id:'e',from:'a',to:'b'}];
   assert.equal(health(d,p,now).label,'Em atenção');
