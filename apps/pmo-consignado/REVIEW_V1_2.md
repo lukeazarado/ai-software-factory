@@ -33,3 +33,14 @@ Este relatório foi anexado ao PR após a revisão de código no SHA acima. Nenh
 ## Patch UX posterior
 
 Após a inclusão do relatório, o UX Designer e o Arquiteto convergiram em duas correções moderadas e um ajuste de conteúdo: grade mobile com rotas visíveis, região persistente de status acessível para a simulação e rótulo explícito de que registros resolvidos podem ser editados. A implementação posterior deste patch altera código executável; o parecer acima não cobre esse novo diff. A nova revisão TL deve atualizar este veredito para o head final do PR.
+
+## Revisão final após patch UX
+
+Head revisado: `2516efb243f96c1d04383db4c126c34b3099057a` do PR #16. TL inspecionou o delta real em `app.js`, `executive.js`, `index.html` e `styles.css`, além do contexto e documentação.
+
+- Os três ajustes UX estão no código: grid mobile de duas colunas, status de simulação persistente fora de `#view` com atualização via `textContent` após rerender, e indicação de que o histórico encerrado pode ser editado.
+- QA independente reexecutou **47/47 testes**, sintaxe e diff-check; CI PMO `41894630788` e Agenda `41894630867` concluíram `success`.
+- Não foram encontrados novos bloqueadores ou regressões de segurança/compatibilidade.
+- Limites: viewport móvel, interação por teclado em dispositivo real, leitor de tela e auditoria WCAG ainda não verificados.
+
+**VEREDITO FINAL: APROVADO para homologação privada.** A publicação privada e a decisão de merge permanecem distintas; o PR está sem merge.

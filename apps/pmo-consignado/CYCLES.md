@@ -81,8 +81,8 @@ Autorização: o usuário pediu mais cinco rodadas e uma exploração da identid
 - Dev: versão visual V1.2; testes de armazenamento V1/V1.1 ajustados para incluir o novo módulo executivo; relatório inclui riscos/decisões aplicáveis sem observações internas por padrão.
 - QA local inicial: 43 aprovados; revisão independente sinalizou classificação indevida de períodos sequenciais como simultâneos. Correção registrada abaixo.
 - Navegador: preview local confirmou fluxo de cadastro/edição de risco e decisão, persistência após recarregar, tipo impedimento, matriz de squads, simulação com dependências transitivas e ausência de alteração às datas oficiais. O modal do relatório foi aberto; a renderização visual/PDF ainda não foi confirmada.
-- TL independente do núcleo V1.2 (antes do patch UX): o achado do diff inicial foi corrigido; revisão do SHA `8481b7922bddf84a678f9c3c1bfc7a0801e3e653` confirmou a correção e não encontrou novos bloqueadores. APROVADO naquele head para homologação privada.
-- QA automatizado atualizado após a regularização UX: `node --test --test-reporter=spec tests/*.test.mjs` — 47 aprovados, 0 falhas; `node --check` de `app.js`, `core.js` e `executive.js` passou.
-- CI do núcleo V1.2: PMO `41891834670` e Agenda `41891834754`, ambos success no head anterior ao patch UX.
-- Patch UX posterior: 47/47 testes locais passaram; o diff atualizado aguarda novo CI e revisão TL antes de qualquer aprovação para homologação.
+- QA local e independente após regularização UX: `node --test --test-reporter=spec tests/*.test.mjs` — 47 aprovados, 0 falhas; sintaxe e `git diff --check` passaram.
+- TL independente no PR #16, SHA `2516efb243f96c1d04383db4c126c34b3099057a`: aprovou para homologação privada; verificou correções do achado anterior, patch UX e compatibilidade; sem novos bloqueadores.
+- CI no SHA do patch UX: PMO `41894630788` e Agenda `41894630867`, ambos success.
+- Limite restante: viewport móvel real, leitor de tela e WCAG prática ainda não foram verificados.
 - Próxima aprovação: feedback humano neste checkpoint de cinco ciclos. Sem merge; site deve continuar privado.

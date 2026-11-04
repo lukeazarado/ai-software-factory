@@ -40,3 +40,9 @@ O TL detectou que períodos sequenciais sem sobreposição eram rotulados como s
 ## Correção após revisão UX retrospectiva
 
 A revisão da skill `projetar-ux` e a convergência com o Arquiteto apontaram navegação móvel sem indicação clara de rotas fora da faixa e falta de anúncio próprio quando a simulação muda. A navegação mobile agora usa grade de duas colunas, sem scroll horizontal; mudanças no cenário atualizam uma região persistente `aria-live`; histórico esclarece que registros resolvidos continuam editáveis. Testes automatizados cobrem o anúncio e os seletores/atributos previstos; viewport físico e leitor de tela permanecem pendentes.
+
+## Revisão independente do PR #16
+
+No SHA `2516efb243f96c1d04383db4c126c34b3099057a`, QA independente reexecutou 47/47 testes, checks de sintaxe e `git diff --check`; tudo passou. Confirmou no diff a região de status, handlers, grade e rótulos mobile, sem bloqueadores de QA.
+
+CI do PMO `41894630788` e da Agenda `41894630867`: success. Não foram testados viewport físico, teclado completo, leitor de tela ou conformidade WCAG; os testes verificam VM, código e seletores, não validação com tecnologia assistiva.
