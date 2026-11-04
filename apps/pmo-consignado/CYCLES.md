@@ -25,4 +25,13 @@ Autorização: até 15 ciclos, com checkpoint humano a cada 5. Este bloco execut
 - QA navegador: mapa exibe clusters/squads dos dois lados; ciclo transitivo m4→m1 rejeitado sem limpar selects; Escape fecha o diálogo. Relatório gerado no DOM excluiu a nota sentinela interna com opção padrão desmarcada. PDF renderizado não foi verificado.
 - TL: revisão de integração, achados de risco transitivo resolvidos. Veredito e limites em REVIEW.md.
 
-Os ciclos 4 e 5 serão registrados após suas evidências.
+## Ciclo 4 — explicação de risco e recuperação de backup
+
+- PO/Arquitetura: explicar a origem do risco transitivo e garantir que todo backup exportado possa ser aceito de volta pelo contrato de importação.
+- Dev: radar/detalhe agora mostram fornecedor e entregas afetadas com projeto/cluster/squad; janela de atualização >7 dias explícita.
+- QA/TL: achado ALTA reproduzido — backup válido >2MiB era recusado. Corrigido com limite compartilhado de 32MiB e backupJSON validado antes de salvar/exportar/importar. Sem truncamento.
+- QA independente: 24/24 testes, incluindo recuperação integral de 500 projetos em backup >2MiB e rejeição de arquivo acima do limite sem leitura/substituição. Testes VM do relatório cobrem filtro, opt-in de notas e texto HTML escapado.
+- QA navegador: cluster e squad criados; tentativa de excluir cluster com squad foi impedida com mensagem e foco no erro. Relatório padrão não contém nota interna sentinela.
+- TL independente: APROVADO no escopo verificado; aguarda diff real no ciclo 5.
+
+O ciclo 5 será registrado após revisão do PR e regressão final.

@@ -70,3 +70,11 @@ Novo bloqueador encontrado pelo QA e reproduzido pelo TL:
 - **[ALTA] `dist/app.js:44` — backup exportado pode ultrapassar o limite de importação.** O schema aceita até 1.000 projetos com textos longos e a exportação não limita bytes, mas o importador recusa arquivos acima de 2 MiB. Reproduzi via Node um conjunto validado com 450 projetos, notas de 3.000 caracteres, objetivo e justificativa de 1.000 caracteres: o JSON indentado usado pelo backup tem **2.431.816 bytes**, acima de **2.097.152 bytes**. O arquivo pode ser exportado e não ser restaurável pela própria aplicação, criando risco de recuperação dos dados. Correção proposta: contrato único de tamanho para salvar/exportar/importar e teste de ida e volta acima de 2 MiB, mantendo um teto explícito contra arquivos excessivos. Encaminhado ao Dev/orquestrador.
 
 Veredito em andamento: **AJUSTES_OBRIGATORIOS** até a correção de recuperação ser retestada. A aprovação do incremento anterior não cobre este achado novo.
+
+### Resolução do bloqueador do ciclo 4
+
+Correção inspecionada: `MAX_BACKUP_BYTES` define 32 MiB e `backupJSON` valida/normaliza os dados, serializa o mesmo formato de exportação e mede os bytes UTF-8. Salvar verifica esse contrato antes de persistir; exportar reutiliza a função; importar aplica o mesmo teto e a gravação validada. Não há truncamento de conteúdo.
+
+QA independente confirmou regressão com 500 projetos e backup acima de 2 MiB: o handler real de importação restaura todos os projetos e o resultado é igual ao normalizado. Um arquivo de 32 MiB + 1 byte é recusado antes da leitura. Suíte atual: **24/24 testes aprovados**.
+
+Veredito do ciclo 4 após correção: **APROVADO**. O achado de recuperação está resolvido no código efetivamente inspecionado e na evidência QA. Segue pendente a revisão do diff real do PR no ciclo 5.

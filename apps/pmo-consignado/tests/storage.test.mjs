@@ -49,8 +49,17 @@ test('valid confirmed import atomically persists the normalized replacement',asy
 });
 test('oversized import is rejected without reading or changing current data',async()=>{
   const original=JSON.stringify(core.demoData()),app=boot(original);let read=false;
-  await app.nodes.get('import-file').listeners.change({target:{files:[{size:2*1024*1024+1,text:async()=>{read=true;return '{}';}}],value:'huge.json'}});
+  await app.nodes.get('import-file').listeners.change({target:{files:[{size:core.MAX_BACKUP_BYTES+1,text:async()=>{read=true;return '{}';}}],value:'huge.json'}});
   assert.equal(read,false);assert.equal(app.raw(),original);assert.equal(app.writes.length,0);
+});
+test('a valid exported backup larger than the former 2 MiB limit can be restored',async()=>{
+  const data=core.demoData();
+  for(let i=3;i<500;i++)data.projects.push({...data.projects[0],id:'project-'+i,notes:'a'.repeat(3000),objective:'b'.repeat(1000)});
+  const exported=core.backupJSON(data),size=Buffer.byteLength(exported);
+  assert.ok(size>2*1024*1024);assert.ok(size<=core.MAX_BACKUP_BYTES);
+  const app=boot(JSON.stringify(core.emptyData()));
+  await app.nodes.get('import-file').listeners.change({target:{files:[{size,text:async()=>exported}],value:'large-backup.json'}});
+  assert.equal(app.writes.length,1);assert.equal(app.snapshot().projects.length,500);assert.deepEqual(app.snapshot(),core.validateData(data));
 });
 test('report generation excludes internal notes by default, marks demo and escapes user text',()=>{
   const data=core.demoData();data.projects[0].notes='SECRET_NOTE_456';data.projects[0].name='<img src=x onerror=alert(1)>';

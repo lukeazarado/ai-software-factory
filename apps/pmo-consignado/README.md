@@ -1,4 +1,4 @@
-# Órbita — PMO Consignado v0.1
+# Órbita — PMO Consignado v1.0
 
 Portal individual da tribo de Consignado: clusters, squads, projetos, marcos e dependências entre entregas. Aplicação estática sem serviços externos. Dados demonstrativos são fictícios.
 
