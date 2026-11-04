@@ -59,8 +59,10 @@ remove.setAttribute('aria-label','Excluir tarefa: '+task.text);
 remove.addEventListener('click',()=>{
 const index=tasks.findIndex(entry=>entry.id===task.id);
 if(index!==-1)tasks.splice(index,1);
-render();
-input.focus();
+status.textContent='Tarefa excluída: '+task.text;
+const next=tasks[Math.min(index,tasks.length-1)];
+render(next?next.id:null);
+if(!next)input.focus();
 });
 item.append(checkbox,label,remove);
 list.append(item);
